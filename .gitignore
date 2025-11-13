@@ -1,0 +1,43 @@
+# ---- Python Standard Ignores ----
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Datasets
+data/
+
+# Large model files
+*.h5
+*.hdf5
+*.ckpt
+*.pth
+*.pt
+*.joblib
+*.pkl
+
+# Experiment logs
+logs/
+tensorboard/
+wandb/
+mlruns/
+
+# Temporary/backup files
+*.tmp
+*.temp
+*.bak
