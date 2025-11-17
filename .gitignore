@@ -19,8 +19,13 @@ venv.bak/
 .DS_Store
 Thumbs.db
 
-# Datasets
-data/
+# Datasets (keep folder structure but ignore data files)
+data/raw/*
+data/processed/*
+data/interim/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+!data/interim/.gitkeep
 
 # Large model files
 *.h5
@@ -30,6 +35,8 @@ data/
 *.pt
 *.joblib
 *.pkl
+models/saved_models/*
+!models/saved_models/.gitkeep
 
 # Experiment logs
 logs/
