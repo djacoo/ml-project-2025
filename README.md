@@ -42,7 +42,7 @@ ml-project-2025/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/YOUR-USERNAME/ml-project-2025.git
+git clone https://github.com/djacoo/ml-project-2025.git
 cd ml-project-2025
 ```
 
@@ -56,19 +56,3 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
-
-## Usage
-
-[Instructions on how to run the project - to be added]
-
-## Results
-
-[Summary of results - to be added]
-
-## Authors
-
-[Your name(s)]
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

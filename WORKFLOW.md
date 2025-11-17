@@ -79,9 +79,6 @@ Use clear, descriptive commit messages:
 - `test: add unit tests for preprocessing`
 - `chore: update requirements.txt`
 
-## Current Branch
-
-You are currently on: **dev**
 
 ## Quick Commands
 
