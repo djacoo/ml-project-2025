@@ -8,7 +8,25 @@ Machine Learning course project - A.Y. 2025/2026
 
 ## Dataset
 
-[Dataset information - to be added]
+This project uses the **Fashion-MNIST** dataset, a collection of Zalando's article images consisting of a training set of 60,000 examples and a test set of 10,000 examples. Each example is a 28x28 grayscale image associated with a label from 10 classes.
+
+### Classes
+0. T-shirt/top
+1. Trouser
+2. Pullover
+3. Dress
+4. Coat
+5. Sandal
+6. Shirt
+7. Sneaker
+8. Bag
+9. Ankle boot
+
+### Dataset Files
+The dataset is located in `data/raw/` and includes:
+- `fashion-mnist_train.csv` - Training data in CSV format (60,000 samples)
+- `fashion-mnist_test.csv` - Test data in CSV format (10,000 samples)
+- Original IDX format files (train-images-idx3-ubyte, train-labels-idx1-ubyte, etc.)
 
 ## Project Structure
 

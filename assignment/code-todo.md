@@ -5,17 +5,17 @@
 ## 1. Setup stuff
 
 ### Getting started
-- [ ] make project folders
-- [ ] setup virtual env (venv or conda)
-- [ ] requirements.txt with libraries I need:
-  - [ ] numpy, pandas
-  - [ ] scikit-learn
-  - [ ] matplotlib, seaborn for plots
-  - [ ] jupyter
-  - [ ] others depending on what I do
-- [ ] init git repo
-- [ ] .gitignore (don't push data, models, pycache)
-- [ ] basic README
+- [x] make project folders
+- [x] setup virtual env (venv or conda)
+- [x] requirements.txt with libraries I need:
+  - [x] numpy, pandas
+  - [x] scikit-learn
+  - [x] matplotlib, seaborn for plots
+  - [x] jupyter
+  - [x] others depending on what I do
+- [x] init git repo
+- [x] .gitignore (don't push data, models, pycache)
+- [x] basic README
 
 ### Dataset
 - [ ] find dataset (kaggle or papers with code probably)
