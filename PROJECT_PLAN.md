@@ -10,12 +10,13 @@
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Timeline & Milestones](#timeline--milestones)
-3. [Tasks Breakdown](#tasks-breakdown)
-4. [Repository Structure](#repository-structure)
-5. [Setup Instructions](#setup-instructions)
-6. [Progress Tracking](#progress-tracking)
-7. [Deliverables Checklist](#deliverables-checklist)
+2. [Development Workflow](#development-workflow)
+3. [Timeline & Milestones](#timeline--milestones)
+4. [Tasks Breakdown](#tasks-breakdown)
+5. [Repository Structure](#repository-structure)
+6. [Setup Instructions](#setup-instructions)
+7. [Progress Tracking](#progress-tracking)
+8. [Deliverables Checklist](#deliverables-checklist)
 
 ---
 
@@ -36,18 +37,65 @@ Predict the Nutri-Score (A, B, C, D, E) of food products based on nutritional in
 
 ---
 
+## Development Workflow
+
+### Git Flow Structure
+
+This project follows Git Flow methodology:
+
+**Branches:**
+- `main` - Production-ready code (stable releases)
+- `dev` - Development branch (integration branch)
+- `feature/*` - Feature branches for individual issues
+- `bugfix/*` - Bug fix branches
+- `hotfix/*` - Urgent production fixes
+
+**Workflow:**
+1. Create feature branch from `dev`: `git checkout -b feature/issue-X-description`
+2. Work on issue and commit changes
+3. Push and create PR to `dev` branch
+4. After review and merge, delete feature branch
+5. When phase complete, merge `dev` to `main`
+
+### Issue Tracking
+
+All work is tracked through GitHub Issues organized by milestones:
+
+**Phase 1 Issues** (Milestone: Phase 1 - Data Preprocessing):
+- Issue #1: Complete EDA with Statistical Analysis
+- Issue #2: Handle Missing Values
+- Issue #3: Remove Outliers and Invalid Values
+- Issue #4: Normalize Numerical Features
+- Issue #5: Encode Categorical Variables
+- Issue #6: Create Derived Features
+- Issue #7: Apply PCA for Dimensionality Reduction
+- Issue #8: Create Train/Val/Test Splits
+
+**Labels:**
+- `phase-1`, `phase-2`, etc. - Phase organization
+- `eda` - Exploratory data analysis
+- `preprocessing` - Data preprocessing tasks
+- `feature-engineering` - Feature engineering tasks
+
+**Links:**
+- [All Issues](https://github.com/djacoo/ml-project-2025/issues)
+- [Milestones](https://github.com/djacoo/ml-project-2025/milestones)
+- [Phase 1 Milestone](https://github.com/djacoo/ml-project-2025/milestone/1)
+
+---
+
 ## Timeline & Milestones
 
 ### Data Acquisition & Exploration
 
-- [ ] Set up development environment
-- [ ] Create project repository structure
-- [ ] Download Open Food Facts dataset
-- [ ] Perform initial data exploration
-- [ ] Document dataset characteristics
-- [ ] Create EDA notebook
-
-**Deliverable:** EDA report with dataset statistics
+- [x] Set up development environment
+- [x] Create project repository structure
+- [x] Set up Git Flow workflow (main, dev branches)
+- [x] Create GitHub Issues and Milestones for Phase 1
+- [x] Download Open Food Facts dataset (100,000 products)
+- [x] Perform initial data exploration
+- [x] Document dataset characteristics
+- [x] Create EDA notebook (`notebooks/eda.ipynb`)
 
 ---
 
