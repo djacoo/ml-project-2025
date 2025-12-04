@@ -64,7 +64,7 @@ python scripts/download_data.py
 
 ## Development Workflow
 
-This project follows **Git Flow** methodology. See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed workflow instructions.
+This project follows **Git Flow** methodology.
 
 ### Quick Start for Development
 
@@ -115,17 +115,6 @@ This project follows **Git Flow** methodology. See [CONTRIBUTING.md](CONTRIBUTIN
 - Confusion Matrix
 - ROC Curves and AUC
 - Training time comparison
-
-## Documentation
-
-- **Project Plan**: [PROJECT_PLAN.md](PROJECT_PLAN.md)
-- **Issues**: [GitHub Issues](https://github.com/djacoo/ml-project-2025/issues)
-- **Milestones**: [GitHub Milestones](https://github.com/djacoo/ml-project-2025/milestones)
-- **Contributing**: [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## Contact
-
-For questions or issues, please open an issue on GitHub.
 
 ## License
 
