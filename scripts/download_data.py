@@ -104,80 +104,121 @@ def download_dataset(url, output_path):
         return False
 
 
-def load_and_filter_data(input_path, output_path, sample_size=None):
+def load_and_filter_data(input_path, output_path, sample_size=None, chunksize=10000):
     """
     Load the raw dataset, filter for relevant data, and save.
+    Processes data in chunks to avoid loading entire dataset into memory.
 
     Args:
         input_path (Path): Path to the raw compressed CSV file
         output_path (Path): Path where to save the filtered CSV
         sample_size (int, optional): If provided, randomly sample this many rows
+        chunksize (int): Number of rows to process at a time (default: 10000)
 
     Returns:
         pd.DataFrame: Filtered dataframe
     """
     try:
         print("\nLoading and filtering dataset...")
+        print(f"Processing in chunks of {chunksize:,} rows to avoid memory issues...")
 
-        # Read the compressed CSV
-        print("Reading CSV file...")
-        df = pd.read_csv(
+        # Initialize counters and storage
+        total_rows = 0
+        filtered_rows = 0
+        valid_rows = 0
+        grade_counts = {}
+        missing_columns = []
+        existing_columns = None
+        all_filtered_chunks = []
+
+        # Read the compressed CSV in chunks
+        print("Reading CSV file in chunks...")
+        chunk_iterator = pd.read_csv(
             input_path,
             compression='gzip',
             sep='\t',
             low_memory=False,
-            on_bad_lines='skip'  # Skip malformed rows
+            on_bad_lines='skip',  # Skip malformed rows
+            chunksize=chunksize
         )
 
-        print(f"✓ Loaded {len(df):,} products")
-        print(f"  Total columns: {len(df.columns)}")
+        # Process each chunk
+        for df_chunk in tqdm(chunk_iterator, desc="Processing chunks"):
+            total_rows += len(df_chunk)
 
-        # Filter for products with Nutri-Score labels
-        print("\nFiltering for products with Nutri-Score...")
-        df_filtered = df[df['nutriscore_grade'].notna()].copy()
-        print(f"✓ Found {len(df_filtered):,} products with Nutri-Score labels")
+            # Determine existing columns on first chunk
+            if existing_columns is None:
+                existing_columns = [col for col in RELEVANT_COLUMNS if col in df_chunk.columns]
+                missing_columns = [col for col in RELEVANT_COLUMNS if col not in df_chunk.columns]
 
-        # Keep only relevant columns that exist in the dataset
-        existing_columns = [col for col in RELEVANT_COLUMNS if col in df_filtered.columns]
-        missing_columns = [col for col in RELEVANT_COLUMNS if col not in df_filtered.columns]
+            # Filter for products with Nutri-Score labels
+            df_filtered = df_chunk[df_chunk['nutriscore_grade'].notna()].copy()
+            filtered_rows += len(df_filtered)
+
+            if len(df_filtered) == 0:
+                continue
+
+            # Keep only relevant columns
+            df_filtered = df_filtered[existing_columns]
+
+            # Filter for valid Nutri-Score grades (a, b, c, d, e)
+            valid_grades = ['a', 'b', 'c', 'd', 'e']
+            df_filtered = df_filtered[df_filtered['nutriscore_grade'].str.lower().isin(valid_grades)]
+            valid_rows += len(df_filtered)
+
+            if len(df_filtered) == 0:
+                continue
+
+            # Update grade counts
+            chunk_grade_counts = df_filtered['nutriscore_grade'].str.upper().value_counts()
+            for grade, count in chunk_grade_counts.items():
+                grade_counts[grade] = grade_counts.get(grade, 0) + count
+
+            # Collect chunks for later processing
+            all_filtered_chunks.append(df_filtered)
+
+        print(f"✓ Processed {total_rows:,} total products")
+        print(f"✓ Found {filtered_rows:,} products with Nutri-Score labels")
+        print(f"✓ Filtered to {valid_rows:,} products with valid Nutri-Score (a-e)")
 
         if missing_columns:
             print(f"\nNote: The following columns are not in the dataset:")
             for col in missing_columns:
                 print(f"  - {col}")
 
-        df_filtered = df_filtered[existing_columns]
         print(f"✓ Kept {len(existing_columns)} relevant columns")
 
-        # Filter for valid Nutri-Score grades (a, b, c, d, e)
-        valid_grades = ['a', 'b', 'c', 'd', 'e']
-        df_filtered = df_filtered[df_filtered['nutriscore_grade'].str.lower().isin(valid_grades)]
-        print(f"✓ Filtered to {len(df_filtered):,} products with valid Nutri-Score (a-e)")
-
+        # Combine all filtered chunks
+        print(f"\nCombining filtered chunks...")
+        df_filtered = pd.concat(all_filtered_chunks, ignore_index=True)
+        
         # Sample if requested
         if sample_size and len(df_filtered) > sample_size:
             df_filtered = df_filtered.sample(n=sample_size, random_state=42)
             print(f"✓ Randomly sampled {sample_size:,} products")
-
-        # Display class distribution
-        print("\nNutri-Score distribution:")
-        grade_counts = df_filtered['nutriscore_grade'].str.upper().value_counts().sort_index()
-        for grade, count in grade_counts.items():
-            percentage = (count / len(df_filtered)) * 100
-            print(f"  Grade {grade}: {count:,} ({percentage:.1f}%)")
-
+            
+            # Recalculate grade distribution for sampled data
+            grade_counts = df_filtered['nutriscore_grade'].str.upper().value_counts().sort_index()
+        
         # Save filtered data
         print(f"\nSaving filtered dataset to {output_path}...")
         df_filtered.to_csv(output_path, index=False)
         print(f"✓ Filtered dataset saved successfully")
 
+        # Display class distribution
+        print("\nNutri-Score distribution:")
+        grade_counts_sorted = dict(sorted(grade_counts.items()))
+        for grade, count in grade_counts_sorted.items():
+            percentage = (count / valid_rows) * 100 if valid_rows > 0 else 0
+            print(f"  Grade {grade}: {count:,} ({percentage:.1f}%)")
+
         # Save metadata
         metadata = {
-            'total_products': len(df),
-            'filtered_products': len(df_filtered),
+            'total_products': total_rows,
+            'filtered_products': valid_rows,
             'columns': len(existing_columns),
             'missing_columns': missing_columns,
-            'grade_distribution': grade_counts.to_dict(),
+            'grade_distribution': grade_counts_sorted,
             'data_source': OPENFOODFACTS_URL,
             'download_date': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
         }
