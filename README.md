@@ -89,14 +89,37 @@ This project follows **Git Flow** methodology.
 
 ## Current Progress
 
+### Phase 1: Data Acquisition & Preprocessing
 - [x] Repository setup and structure
-- [x] Data download (100k products)
-- [x] Initial EDA started
-- [ ] Phase 1: Data Preprocessing (In Progress)
-  - See [milestone](https://github.com/djacoo/ml-project-2025/milestone/1)
-- [ ] Phase 2: Model Training
-- [ ] Phase 3: Evaluation
-- [ ] Phase 4: Report Writing
+- [x] Data download (100k products from Open Food Facts)
+- [x] Exploratory Data Analysis (EDA)
+  - Statistical analysis of all features
+  - Missing value analysis
+  - Class distribution analysis
+  - Feature correlation analysis
+- [x] **Issue #2: Missing Value Handling** ✓
+  - Implemented `MissingValueHandler` class in `src/data/preprocessing.py`
+  - Comprehensive imputation strategy (median, constant, placeholder)
+  - Validation notebook with before/after comparison
+  - Zero missing values in final dataset (100,000 rows × 20 columns)
+- [ ] Issue #3: Remove Outliers and Invalid Values (Next)
+- [ ] Issue #4: Normalize Numerical Features
+- [ ] Issue #5: Encode Categorical Variables
+- [ ] Issue #6: Create Derived Features
+- [ ] Issue #7: Apply PCA for Dimensionality Reduction
+- [ ] Issue #8: Create Train/Val/Test Splits
+
+### Phase 2: Model Training
+- [ ] 7 Classical ML models to implement
+
+### Phase 3: Evaluation & Analysis
+- [ ] Performance metrics and comparison
+
+### Phase 4: Documentation
+- [ ] Technical report (8-20 pages)
+- [ ] Presentation slides (~10 min)
+
+**Track progress:** [Phase 1 Milestone](https://github.com/djacoo/ml-project-2025/milestone/1)
 
 ## Models to Implement
 
