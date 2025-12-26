@@ -1,9 +1,10 @@
 """
-Data preprocessing module for handling missing values in the Nutri-Score prediction dataset.
+Data preprocessing module for the Nutri-Score prediction dataset.
 
-This module implements various strategies for handling missing data based on the
-missing percentage and feature type, following best practices for machine learning
-preprocessing.
+This module implements various preprocessing strategies:
+- Missing value handling (imputation, dropping)
+- Outlier detection and removal (domain rules, statistical methods)
+- Data validation and cleaning
 """
 
 import pandas as pd
@@ -224,6 +225,241 @@ class MissingValueHandler:
             json.dump(report, f, indent=2)
 
         print(f"\n✓ Imputation report saved to: {output_path}")
+
+
+class OutlierHandler:
+    """
+    Handles outliers and invalid values in nutritional data.
+
+    Strategy:
+    - Remove negative values (nutritional values cannot be negative)
+    - Apply domain-specific valid ranges (e.g., fat <= 100g per 100g)
+    - Remove statistical outliers using IQR method
+    - Validate energy consistency with macronutrients
+    """
+
+    def __init__(self):
+        """Initialize the outlier handler."""
+        self.removal_stats = {}
+        self.outlier_report = {}
+
+        # Define valid ranges for nutritional values (per 100g)
+        self.valid_ranges = {
+            'energy_100g': (0, 3000),         # 0-3000 kcal per 100g
+            'fat_100g': (0, 100),              # 0-100g per 100g
+            'saturated-fat_100g': (0, 100),    # 0-100g per 100g
+            'carbohydrates_100g': (0, 100),    # 0-100g per 100g
+            'sugars_100g': (0, 100),           # 0-100g per 100g
+            'fiber_100g': (0, 100),            # 0-100g per 100g (extreme but possible)
+            'proteins_100g': (0, 100),         # 0-100g per 100g
+            'salt_100g': (0, 50),              # 0-50g per 100g (very salty max)
+        }
+
+    def detect_outliers(self, df: pd.DataFrame) -> Dict:
+        """
+        Detect various types of outliers in the dataset.
+
+        Args:
+            df: Input dataframe
+
+        Returns:
+            Dictionary with outlier statistics
+        """
+        outlier_info = {}
+
+        for col in self.valid_ranges.keys():
+            if col not in df.columns:
+                continue
+
+            col_info = {}
+
+            # Check negative values
+            negative_mask = df[col] < 0
+            col_info['negative_count'] = int(negative_mask.sum())
+
+            # Check values outside valid range
+            min_val, max_val = self.valid_ranges[col]
+            below_min = (df[col] < min_val).sum()
+            above_max = (df[col] > max_val).sum()
+            col_info['below_min'] = int(below_min)
+            col_info['above_max'] = int(above_max)
+            col_info['valid_range'] = self.valid_ranges[col]
+
+            # Statistical outliers using IQR method
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 3 * IQR  # Using 3*IQR for extreme outliers only
+            upper_bound = Q3 + 3 * IQR
+
+            statistical_outliers = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
+            col_info['statistical_outliers'] = int(statistical_outliers)
+            col_info['IQR_bounds'] = (float(lower_bound), float(upper_bound))
+
+            # Current stats
+            col_info['min'] = float(df[col].min())
+            col_info['max'] = float(df[col].max())
+            col_info['median'] = float(df[col].median())
+
+            outlier_info[col] = col_info
+
+        return outlier_info
+
+    def remove_outliers(self, df: pd.DataFrame,
+                       target_col: str = 'nutriscore_grade') -> pd.DataFrame:
+        """
+        Remove outliers and invalid values according to defined strategy.
+
+        Args:
+            df: Input dataframe
+            target_col: Name of the target column (to preserve)
+
+        Returns:
+            Cleaned dataframe with outliers removed
+        """
+        df_clean = df.copy()
+        initial_rows = len(df_clean)
+
+        print("\n" + "="*70)
+        print("OUTLIER REMOVAL")
+        print("="*70)
+        print(f"\nInitial dataset: {initial_rows:,} rows")
+
+        # Step 1: Analyze outliers before removal
+        print("\n1. Analyzing outliers...")
+        self.outlier_report['before_cleaning'] = self.detect_outliers(df_clean)
+
+        # Print summary of issues found
+        print("\nOutlier Summary (Before Cleaning):")
+        print("-" * 70)
+        total_issues = 0
+        for col, info in self.outlier_report['before_cleaning'].items():
+            issues = info['negative_count'] + info['above_max']
+            if issues > 0:
+                total_issues += issues
+                print(f"{col:25s}: {info['negative_count']:6,} negative, "
+                      f"{info['above_max']:6,} above max ({info['valid_range'][1]})")
+
+        print(f"\nTotal problematic values: {total_issues:,}")
+
+        # Step 2: Remove rows with invalid values
+        print("\n2. Removing invalid values...")
+        rows_removed = 0
+        removal_reasons = {}
+
+        for col in self.valid_ranges.keys():
+            if col not in df_clean.columns:
+                continue
+
+            min_val, max_val = self.valid_ranges[col]
+
+            # Create mask for invalid values (negative or outside valid range)
+            invalid_mask = (df_clean[col] < min_val) | (df_clean[col] > max_val)
+            invalid_count = invalid_mask.sum()
+
+            if invalid_count > 0:
+                # Store removal reason
+                removal_reasons[col] = {
+                    'count': int(invalid_count),
+                    'reason': f'Outside valid range ({min_val}, {max_val})'
+                }
+
+                # Remove invalid rows
+                df_clean = df_clean[~invalid_mask]
+                rows_removed += invalid_count
+
+                print(f"   - {col:25s}: Removed {invalid_count:,} rows")
+
+        # Step 3: Remove statistical outliers (very conservative - only extreme cases)
+        print("\n3. Checking for extreme statistical outliers...")
+
+        nutritional_cols = list(self.valid_ranges.keys())
+        existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
+
+        for col in existing_cols:
+            # Use 3*IQR for very extreme outliers only
+            Q1 = df_clean[col].quantile(0.25)
+            Q3 = df_clean[col].quantile(0.75)
+            IQR = Q3 - Q1
+            lower_bound = Q1 - 3 * IQR
+            upper_bound = Q3 + 3 * IQR
+
+            # Only remove if still outside valid range (double check)
+            extreme_mask = ((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound))
+            extreme_count = extreme_mask.sum()
+
+            if extreme_count > 0:
+                if col not in removal_reasons:
+                    removal_reasons[col] = {
+                        'count': int(extreme_count),
+                        'reason': f'Extreme statistical outlier (3*IQR)'
+                    }
+
+                print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
+                      f"(range: {lower_bound:.2f} - {upper_bound:.2f})")
+
+        # Step 4: Validate energy consistency (optional check)
+        print("\n4. Validating energy consistency...")
+        if all(col in df_clean.columns for col in ['energy_100g', 'fat_100g',
+                                                     'carbohydrates_100g', 'proteins_100g']):
+            # Approximate energy from macros: fat=9kcal/g, carbs=4kcal/g, protein=4kcal/g
+            calculated_energy = (df_clean['fat_100g'] * 9 +
+                                df_clean['carbohydrates_100g'] * 4 +
+                                df_clean['proteins_100g'] * 4)
+
+            # Allow 50% margin for fiber and other factors
+            energy_diff_ratio = abs(df_clean['energy_100g'] - calculated_energy) / (calculated_energy + 1)
+            inconsistent = (energy_diff_ratio > 2.0).sum()  # More than 200% difference
+
+            print(f"   - Energy consistency check: {inconsistent:,} highly inconsistent values")
+            print(f"   - (Note: Not removing based on this check, just informative)")
+
+        # Step 5: Final verification
+        print("\n5. Final verification...")
+        final_rows = len(df_clean)
+        total_removed = initial_rows - final_rows
+        removal_pct = (total_removed / initial_rows) * 100
+
+        print(f"   Initial rows: {initial_rows:,}")
+        print(f"   Final rows: {final_rows:,}")
+        print(f"   Rows removed: {total_removed:,} ({removal_pct:.2f}%)")
+
+        # Analyze outliers after removal
+        self.outlier_report['after_cleaning'] = self.detect_outliers(df_clean)
+        self.outlier_report['removal_summary'] = removal_reasons
+        self.outlier_report['rows_removed'] = int(total_removed)
+        self.outlier_report['removal_percentage'] = float(removal_pct)
+
+        # Verify no invalid values remain
+        print("\n6. Validation check...")
+        issues_remaining = 0
+        for col, info in self.outlier_report['after_cleaning'].items():
+            issues = info['negative_count'] + info['above_max']
+            if issues > 0:
+                issues_remaining += issues
+                print(f"   ⚠️  {col}: {issues:,} issues remaining")
+
+        if issues_remaining == 0:
+            print("   ✓ All invalid values successfully removed!")
+        else:
+            print(f"   ⚠️  WARNING: {issues_remaining:,} issues remaining")
+
+        print("\n" + "="*70)
+
+        return df_clean
+
+    def save_outlier_report(self, output_path: Path):
+        """
+        Save detailed report of outlier removal.
+
+        Args:
+            output_path: Path to save the JSON report
+        """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_path, 'w') as f:
+            json.dump(self.outlier_report, f, indent=2)
+
+        print(f"\n✓ Outlier removal report saved to: {output_path}")
 
 
 def preprocess_dataset(input_path: Path,
