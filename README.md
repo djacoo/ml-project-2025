@@ -102,7 +102,12 @@ This project follows **Git Flow** methodology.
   - Comprehensive imputation strategy (median, constant, placeholder)
   - Validation notebook with before/after comparison
   - Zero missing values in final dataset (100,000 rows × 20 columns)
-- [ ] Issue #3: Remove Outliers and Invalid Values (Next)
+- [x] **Issue #3: Remove Outliers and Invalid Values** ✓
+  - Implemented `OutlierHandler` class with domain-specific rules
+  - Removed 3,903 rows (3.9%) with invalid nutritional values
+  - Domain validation (energy 0-3000 kcal, macros 0-100g, salt 0-50g)
+  - Statistical outlier detection (IQR method)
+  - Final dataset: 96,097 rows × 20 columns, all values validated
 - [ ] Issue #4: Normalize Numerical Features
 - [ ] Issue #5: Encode Categorical Variables
 - [ ] Issue #6: Create Derived Features

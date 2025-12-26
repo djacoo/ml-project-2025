@@ -109,7 +109,13 @@ All work is tracked through GitHub Issues organized by milestones:
   - 'unknown' placeholder for categorical features
   - Validation notebook with before/after analysis
   - 100% data retention (100,000 rows preserved)
-- [ ] Remove outliers and invalid data (Issue #3 - Next)
+- [x] Remove outliers and invalid data (Issue #3 - COMPLETED)
+  - Implemented OutlierHandler class with domain rules
+  - Removed 3,903 rows (3.9%) with invalid values
+  - Domain-specific validation (energy, macros, salt ranges)
+  - IQR statistical outlier detection (3×IQR threshold)
+  - Validation notebook with distribution analysis
+  - Final dataset: 96,097 rows × 20 columns (all values valid)
 - [ ] Normalize nutritional values per 100g
 - [ ] Encode categorical variables
 - [ ] Create derived features
