@@ -101,9 +101,9 @@ All work is tracked through GitHub Issues organized by milestones:
 
 ### Data Preprocessing & Feature Engineering
 
-- [ ] Handle missing values
-- [ ] Remove outliers and invalid data
-- [ ] Normalize nutritional values per 100g
+- [x] Handle missing values
+- [x] Remove outliers and invalid data
+- [x] Normalize nutritional values per 100g
 - [ ] Encode categorical variables
 - [ ] Create derived features
 - [ ] Apply dimensionality reduction (PCA)
