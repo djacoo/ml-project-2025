@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import List, Optional
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from scipy.stats import skew
 
 # numerical features for Nutri-Score
 NUMERICAL_FEATURES = [
@@ -39,45 +40,39 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
     Wrapper for Nutri-Score feature scaling
     """
 
-    def __init__(
-        self,
-        method: str = 'robust',
-        features: Optional[List[str]] = None
-    ):
+    def __init__(self, method: str = 'auto',skew_threshold: float = 0.5):
         self.method = method
-        self.features = features or NUMERICAL_FEATURES
-        self._init_scaler()
+        self.scalers= {}
+        self.skew_threshold = skew_threshold
 
-    def _init_scaler(self):
-        if self.method not in SCALERS:
-            raise ValueError(f"Unknown scaling method: {self.method}")
-        self.scaler_ = SCALERS[self.method]()
-
-    def fit(self, X, y=None):
-        
-        self._check_features(X)
-        self.scaler_.fit(X[self.features])
+    
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None):
+        self.scalers = {}
+        for feature in NUMERICAL_FEATURES:
+            if self.method == 'auto':
+                self.scalers[feature] = self.skewness_scaler(feature,X=X)
+            else:
+                self.scalers[feature] = SCALERS[self.method]()
+            self.scalers[feature].fit(X[feature].values.reshape(-1, 1))
         return self
 
-    def transform(self, X):
-        self._check_features(X)
-        
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         X_scaled = X.copy()
-        X_scaled[self.features] = self.scaler_.transform(X[self.features])
+        for feature in NUMERICAL_FEATURES:
+            X_scaled[feature] = self.scalers[feature].transform(X[feature].values.reshape(-1, 1))
         return X_scaled
 
-    def _check_features(self, X):
-        
-        for feature in self.features:
-            if feature not in X.columns:
-                raise ValueError(f"Missing feature in DataFrame: {feature}")
-                
-    def save(self, path: str):
-        
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        joblib.dump(self, path)
+    def skewness_scaler(self, feature: str,X: pd.DataFrame):
+        skewness = abs(skew(X[feature]))
+        if skewness > self.skew_threshold:
+            return MinMaxScaler()
+        else:
+            return StandardScaler()
 
-    @staticmethod
-    def load(path: str):
+    def save(self, path: str) -> None:
+        joblib.dump(self, path)
         
+    @classmethod
+    def load(cls, path: str):
         return joblib.load(path)
+    
