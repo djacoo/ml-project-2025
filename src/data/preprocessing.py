@@ -12,7 +12,14 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple
 import json
-from data.countries_mappings import COUNTRY_OVERRIDES
+import sys
+
+try:
+    from .countries_mappings import COUNTRY_OVERRIDES
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from data.countries_mappings import COUNTRY_OVERRIDES
+
 import pycountry
 
 class MissingValueHandler:
@@ -497,7 +504,8 @@ def preprocess_dataset(input_path: Path,
         print("CLEANING COUNTRIES COLUMN")
         print("="*70)
         print(f"\nCleaning 'countries' column...")
-        df_processed['countries_clean'] = df_processed['countries'].apply(clean_countries_column)
+        df_processed['countries'] = df_processed['countries'].apply(clean_countries_column)
+        print("✓ Countries column cleaned and overwritten")
     # Save processed data
     print(f"\nSaving processed data to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -535,7 +543,26 @@ def normalize_single_country(raw_name: str) -> str:
 
     # Lookup in ISO standard using Pycountry
     try:
-        return pycountry.countries.lookup(name).name
+        country = pycountry.countries.lookup(name)
+        country_name = country.name
+        
+        # Normalize: pycountry may return names in different languages
+        # (e.g., "Deutschland" instead of "Germany")
+        # Check if the result (case-insensitive) should map to a standard name
+        country_name_lower = country_name.lower()
+        
+        # If pycountry returned a name that's in our override dict, use the standard name
+        if country_name_lower in COUNTRY_OVERRIDES:
+            return COUNTRY_OVERRIDES[country_name_lower]
+        
+        # Check if the result matches any standard name we use (case-insensitive)
+        # This ensures consistency (e.g., if pycountry returns "Germany" and we use "Germany", keep it)
+        standard_names = set(COUNTRY_OVERRIDES.values())
+        for std_name in standard_names:
+            if country_name_lower == std_name.lower():
+                return std_name  # Return the standard name we use
+        
+        return country_name
     except LookupError:
         return None
 
