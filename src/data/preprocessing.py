@@ -12,7 +12,15 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple
 import json
+import sys
 
+try:
+    from .countries_mappings import COUNTRY_OVERRIDES
+except ImportError:
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from data.countries_mappings import COUNTRY_OVERRIDES
+
+import pycountry
 
 class MissingValueHandler:
     """
@@ -466,7 +474,8 @@ def preprocess_dataset(input_path: Path,
                       output_path: Path,
                       report_path: Path = None) -> Tuple[pd.DataFrame, MissingValueHandler]:
     """
-    Main preprocessing function to handle missing values.
+    Main preprocessing function to handle missing values and outliers.
+    This function also cleans the 'countries' column.
 
     Args:
         input_path: Path to input CSV file
@@ -489,6 +498,14 @@ def preprocess_dataset(input_path: Path,
     handler = MissingValueHandler(threshold_drop_feature=0.95)
     df_processed = handler.handle_missing_values(df)
 
+    # Clean countries column if it exists
+    if 'countries' in df_processed.columns:
+        print("\n" + "="*70)
+        print("CLEANING COUNTRIES COLUMN")
+        print("="*70)
+        print(f"\nCleaning 'countries' column...")
+        df_processed['countries'] = df_processed['countries'].apply(clean_countries_column)
+        print("✓ Countries column cleaned and overwritten")
     # Save processed data
     print(f"\nSaving processed data to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -501,6 +518,83 @@ def preprocess_dataset(input_path: Path,
 
     return df_processed, handler
 
+def normalize_single_country(raw_name: str) -> str:
+    """
+    Convert a raw country name to the standard ISO name.
+    
+    Strategy: Override -> Lookup ISO -> None
+    
+    Args:
+        raw_name: Raw country name string
+        
+    Returns:
+        Standardized country name or None if not found
+    """
+    # Base cleaning
+    name = str(raw_name).lower().strip()
+    name = name.replace("en:", "").replace("-", " ")
+    
+    if not name:
+        return None
+
+    # Check the dictionary in countries_mappings.py
+    if name in COUNTRY_OVERRIDES:
+        return COUNTRY_OVERRIDES[name]
+
+    # Lookup in ISO standard using Pycountry
+    try:
+        country = pycountry.countries.lookup(name)
+        country_name = country.name
+        
+        # Normalize: pycountry may return names in different languages
+        # (e.g., "Deutschland" instead of "Germany")
+        # Check if the result (case-insensitive) should map to a standard name
+        country_name_lower = country_name.lower()
+        
+        # If pycountry returned a name that's in our override dict, use the standard name
+        if country_name_lower in COUNTRY_OVERRIDES:
+            return COUNTRY_OVERRIDES[country_name_lower]
+        
+        # Check if the result matches any standard name we use (case-insensitive)
+        # This ensures consistency (e.g., if pycountry returns "Germany" and we use "Germany", keep it)
+        standard_names = set(COUNTRY_OVERRIDES.values())
+        for std_name in standard_names:
+            if country_name_lower == std_name.lower():
+                return std_name  # Return the standard name we use
+        
+        return country_name
+    except LookupError:
+        return None
+
+def clean_countries_column(entry) -> str:
+    """
+    Clean and normalize country entries.
+    
+    Pipeline: Split -> Normalize -> Deduplicate -> Join
+    
+    Args:
+        entry: Country entry (can be single country or comma-separated list)
+        
+    Returns:
+        Cleaned, sorted, comma-separated country string or "unknown"
+    """
+    if pd.isna(entry) or entry == "unknown":
+        return "unknown"
+    
+    valid_countries = set()
+    
+    # Split to handle lists
+    for raw_item in str(entry).split(','):
+        clean_name = normalize_single_country(raw_item)
+        if clean_name:
+            valid_countries.add(clean_name)
+    
+    # Return "unknown" if no valid countries found
+    if not valid_countries:
+        return "unknown"
+    
+    # Return sorted string for determinism
+    return ",".join(sorted(valid_countries))
 
 if __name__ == "__main__":
     # Define paths
