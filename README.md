@@ -62,6 +62,35 @@ pip install -r requirements.txt
 python scripts/download_data.py
 ```
 
+### 5. Run Preprocessing Pipeline
+
+The preprocessing pipeline must be executed in the following order:
+
+```bash
+# 1. Handle missing values (imputation)
+python src/data/preprocessing.py
+
+# 2. Remove outliers and invalid values
+python scripts/remove_outliers.py
+
+# 3. Create train/validation/test splits
+python scripts/split_data.py
+
+# 4. Apply feature scaling
+python scripts/apply_scaling.py
+
+# 5. Encode categorical variables
+python scripts/apply_encoding.py
+
+# 6. Apply PCA dimensionality reduction (optional)
+python scripts/apply_pca.py
+```
+
+**Note:** Each script loads the output from the previous step. The pipeline creates the following files:
+- `openfoodfacts_filtered.csv` → `openfoodfacts_preprocessed.csv` → `openfoodfacts_cleaned.csv` → `openfoodfacts_scaled.csv` → `openfoodfacts_encoded.csv` → `openfoodfacts_pca.csv`
+
+The final processed data will be available in `data/processed/` with separate train/val/test splits in `data/processed/splits/`.
+
 ## Development Workflow
 
 This project follows **Git Flow** methodology.
@@ -89,7 +118,7 @@ This project follows **Git Flow** methodology.
 
 ## Current Progress
 
-### Phase 1: Data Acquisition & Preprocessing
+### Phase 1: Data Acquisition & Preprocessing ✅ **COMPLETED**
 - [x] Repository setup and structure
 - [x] Data download (100k products from Open Food Facts)
 - [x] Exploratory Data Analysis (EDA)
@@ -108,11 +137,37 @@ This project follows **Git Flow** methodology.
   - Domain validation (energy 0-3000 kcal, macros 0-100g, salt 0-50g)
   - Statistical outlier detection (IQR method)
   - Final dataset: 96,097 rows × 20 columns, all values validated
-- [ ] Issue #4: Normalize Numerical Features
-- [ ] Issue #5: Encode Categorical Variables
-- [ ] Issue #6: Create Derived Features
-- [ ] Issue #7: Apply PCA for Dimensionality Reduction
-- [ ] Issue #8: Create Train/Val/Test Splits
+- [x] **Issue #4: Normalize Numerical Features** ✓
+  - Implemented `FeatureScaler` class in `src/features/scaling.py`
+  - StandardScaler applied to numerical features
+  - Fitted on train split, applied to entire dataset
+  - Scaler saved to `models/scaler.joblib`
+  - Validation notebook: `notebooks/scaling_validation.ipynb`
+- [x] **Issue #5: Encode Categorical Variables** ✓
+  - Implemented `FeatureEncoder` class in `src/features/encoding.py`
+  - One-hot encoding for top 15 countries (others grouped as "other")
+  - Encoder saved to `models/encoder.joblib`
+  - Validation notebook: `notebooks/encoding_validation.ipynb`
+- [x] **Issue #6: Create Derived Features** ✓
+  - Implemented `FeatureEngineer` class in `src/features/feature_engineering.py`
+  - Created macro nutrient ratios (fat/protein, sugar/carb, saturated/total fat)
+  - Added energy density and caloric contribution features
+  - Created boolean flags for high nutrient levels (WHO recommendations)
+  - Validation notebook: `notebooks/feature_engineering_validation.ipynb`
+- [x] **Issue #7: Apply PCA for Dimensionality Reduction** ✓
+  - Implemented `FeatureReducer` class in `src/features/dimensionality_reduction.py`
+  - PCA applied with 95% variance threshold
+  - PCA model saved to `models/pca.joblib`
+  - Validation notebook: `notebooks/pca_validation.ipynb`
+- [x] **Issue #8: Create Train/Val/Test Splits** ✓
+  - Stratified split: 70% train, 15% validation, 15% test
+  - Total samples: 98,468 (after preprocessing)
+  - Train: 68,927 samples | Val: 14,770 samples | Test: 14,771 samples
+  - Class distribution preserved across splits (max deviation: 0.000046)
+  - Splits saved to `data/processed/splits/`
+  - Metadata saved to `data/processed/split_metadata.json`
+
+**Phase 1 Summary:** All preprocessing steps completed. Dataset ready for model training with 98,468 samples split into train/val/test sets. All preprocessing models (scaler, encoder, PCA) saved and ready for inference.
 
 ### Phase 2: Model Training
 - [ ] 7 Classical ML models to implement
