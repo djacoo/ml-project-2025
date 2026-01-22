@@ -252,8 +252,8 @@ class OutlierHandler:
         self.outlier_report = {}
 
         # Define valid ranges for nutritional values (per 100g)
+        # Note: energy_100g removed (redundant with energy-kcal_100g)
         self.valid_ranges = {
-            'energy_100g': (0, 3000),         # 0-3000 kcal per 100g
             'fat_100g': (0, 100),              # 0-100g per 100g
             'saturated-fat_100g': (0, 100),    # 0-100g per 100g
             'carbohydrates_100g': (0, 100),    # 0-100g per 100g
@@ -407,20 +407,7 @@ class OutlierHandler:
                       f"(range: {lower_bound:.2f} - {upper_bound:.2f})")
 
         # Step 4: Validate energy consistency (optional check)
-        print("\n4. Validating energy consistency...")
-        if all(col in df_clean.columns for col in ['energy_100g', 'fat_100g',
-                                                     'carbohydrates_100g', 'proteins_100g']):
-            # Approximate energy from macros: fat=9kcal/g, carbs=4kcal/g, protein=4kcal/g
-            calculated_energy = (df_clean['fat_100g'] * 9 +
-                                df_clean['carbohydrates_100g'] * 4 +
-                                df_clean['proteins_100g'] * 4)
-
-            # Allow 50% margin for fiber and other factors
-            energy_diff_ratio = abs(df_clean['energy_100g'] - calculated_energy) / (calculated_energy + 1)
-            inconsistent = (energy_diff_ratio > 2.0).sum()  # More than 200% difference
-
-            print(f"   - Energy consistency check: {inconsistent:,} highly inconsistent values")
-            print(f"   - (Note: Not removing based on this check, just informative)")
+        # Note: Energy consistency check removed (energy_100g column removed)
 
         # Step 5: Final verification
         print("\n5. Final verification...")
@@ -506,6 +493,33 @@ def preprocess_dataset(input_path: Path,
         print(f"\nCleaning 'countries' column...")
         df_processed['countries'] = df_processed['countries'].apply(clean_countries_column)
         print("✓ Countries column cleaned and overwritten")
+    
+    # Remove unnecessary columns
+    print("\n" + "="*70)
+    print("REMOVING UNNECESSARY COLUMNS")
+    print("="*70)
+    
+    columns_to_remove = []
+    
+    # Remove energy_100g (redundant with energy-kcal_100g)
+    if 'energy_100g' in df_processed.columns:
+        columns_to_remove.append('energy_100g')
+        print(f"  - Removing 'energy_100g' (redundant with 'energy-kcal_100g')")
+    
+    # Remove main_category and categories if they have > 10k unique values
+    for col in ['main_category', 'categories']:
+        if col in df_processed.columns:
+            n_unique = df_processed[col].nunique()
+            if n_unique > 10000:
+                columns_to_remove.append(col)
+                print(f"  - Removing '{col}' ({n_unique:,} unique values, > 10k threshold)")
+    
+    if columns_to_remove:
+        df_processed = df_processed.drop(columns=columns_to_remove)
+        print(f"\n✓ Removed {len(columns_to_remove)} column(s)")
+    else:
+        print("\n✓ No columns to remove")
+    
     # Save processed data
     print(f"\nSaving processed data to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
