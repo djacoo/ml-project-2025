@@ -1,14 +1,12 @@
 """
 Script to apply feature scaling.
 Fits on a reproducible train split, applies to whole dataset,
-and marks the split in the output file.
+and preserves the split_group column from the input dataset.
 """
 
 import sys
 import pandas as pd
-import numpy as np
 from pathlib import Path
-from sklearn.model_selection import train_test_split
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
@@ -30,27 +28,37 @@ def main():
     print(f"Loading: {input_file}")
     df = pd.read_csv(input_file)
     
-    indices = np.arange(len(df))
-    target_col = 'nutriscore_grade' 
-    y = df[target_col] if target_col in df.columns else None
-    train_idx, test_idx = train_test_split(
-        indices, 
-        test_size=0.2, 
-        random_state=42, 
-        stratify=y
-    )
+    # Check if split_group exists
+    split_group_col = 'split_group'
+    if split_group_col not in df.columns:
+        raise ValueError(
+            f"'{split_group_col}' column not found in dataset. "
+            f"Please run 'scripts/split_data.py' first to create train/val/test splits."
+        )
     
-    # creating the train subset based on the indices
+    # Extract split_group
+    split_group = df[split_group_col].copy()
+    
+    # Get train indices (for fitting scaler)
+    train_mask = split_group == 'train'
+    train_idx = df.index[train_mask]
+    
+    print(f"Using existing 'split_group' column:")
+    print(f"  Train: {train_mask.sum():,} samples")
+    print(f"  Val:   {(split_group == 'val').sum():,} samples")
+    print(f"  Test:  {(split_group == 'test').sum():,} samples")
+    
+    # Create train subset for fitting scaler
     X_train = df.iloc[train_idx].copy()
     
     # Fit Scaler only on train set
     scaler_path = models_dir / "scaler.joblib"
     
     if scaler_path.exists():
-        print(f"Loading existing scaler from {scaler_path}")
+        print(f"\nLoading existing scaler from {scaler_path}")
         scaler = FeatureScaler.load(str(scaler_path))
     else:
-        print("Fitting new scaler on TRAIN subset")
+        print("\nFitting new scaler on TRAIN subset")
         scaler = FeatureScaler(method='auto', skew_threshold=1.0)
         scaler.fit(X_train)
         scaler.save(str(scaler_path))
@@ -59,17 +67,16 @@ def main():
     print("Applying transformation to the whole dataset")
     df_scaled = scaler.transform(df)
     
-    #adding split group column to track train/test rows
-    df_scaled['split_group'] = 'test'
-    df_scaled.iloc[train_idx, df_scaled.columns.get_loc('split_group')] = 'train'
+    # Preserve split_group column
+    df_scaled[split_group_col] = split_group.values
     
-    #saving the scaled dataset
+    # Save the scaled dataset
     output_file.parent.mkdir(parents=True, exist_ok=True)
     df_scaled.to_csv(output_file, index=False)
     
     print("\n" + "="*70)
     print(f"Scaled data saved to {output_file}")
-    print(f"Column 'split_group' added to track train/test rows")
+    print(f"Column 'split_group' preserved from input dataset")
     print("="*70)
 
 if __name__ == "__main__":
