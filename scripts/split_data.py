@@ -56,10 +56,7 @@ def main():
     # Check if split_group already exists
     if 'split_group' in df.columns:
         print("\n⚠ Warning: 'split_group' column already exists in dataset")
-        response = input("Overwrite existing split? (y/n): ")
-        if response.lower() != 'y':
-            print("Aborting. Existing split preserved.")
-            return
+        print("Overwriting existing split...")
         df = df.drop(columns=['split_group'])
     
     # Perform split
@@ -163,8 +160,8 @@ def main():
     print(f"Split files directory: {splits_dir}")
     print(f"Metadata file: {metadata_file}")
     print("\nNext steps:")
-    print("  1. Run 'scripts/apply_scaling.py' (will use existing split_group)")
-    print("  2. Run 'scripts/apply_encoding.py'")
+    print("  1. Run 'scripts/apply_encoding.py' (will use existing split_group)")
+    print("  2. Run 'scripts/apply_scaling.py' (scales all numerical features)")
     print("  3. Run 'scripts/apply_pca.py'")
     print("="*70)
 

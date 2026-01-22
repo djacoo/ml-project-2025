@@ -248,14 +248,14 @@ def save_split_metadata(
     metadata = {
         'configuration': config,
         'statistics': {
-            'train_size': stats['train_counts'],
-            'val_size': stats['val_counts'],
-            'test_size': stats['test_counts'],
+            'train_size': {k: int(v) for k, v in stats['train_counts'].items()},
+            'val_size': {k: int(v) for k, v in stats['val_counts'].items()},
+            'test_size': {k: int(v) for k, v in stats['test_counts'].items()},
             'train_distribution': {k: float(v) for k, v in stats['train_distribution'].items()},
             'val_distribution': {k: float(v) for k, v in stats['val_distribution'].items()},
             'test_distribution': {k: float(v) for k, v in stats['test_distribution'].items()},
             'max_deviation': float(stats['max_deviation']),
-            'is_balanced': stats['is_balanced']
+            'is_balanced': bool(stats['is_balanced'])
         }
     }
     

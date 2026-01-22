@@ -76,18 +76,20 @@ python scripts/remove_outliers.py
 # 3. Create train/validation/test splits
 python scripts/split_data.py
 
-# 4. Apply feature scaling
-python scripts/apply_scaling.py
-
-# 5. Encode categorical variables
+# 4. Encode categorical variables
 python scripts/apply_encoding.py
+
+# 5. Apply feature scaling (scales all numerical features, including target-encoded ones)
+python scripts/apply_scaling.py
 
 # 6. Apply PCA dimensionality reduction (optional)
 python scripts/apply_pca.py
 ```
 
 **Note:** Each script loads the output from the previous step. The pipeline creates the following files:
-- `openfoodfacts_filtered.csv` → `openfoodfacts_preprocessed.csv` → `openfoodfacts_cleaned.csv` → `openfoodfacts_scaled.csv` → `openfoodfacts_encoded.csv` → `openfoodfacts_pca.csv`
+- `openfoodfacts_filtered.csv` → `openfoodfacts_preprocessed.csv` → `openfoodfacts_cleaned.csv` → `openfoodfacts_encoded.csv` → `openfoodfacts_scaled.csv` → `openfoodfacts_pca.csv`
+
+**Important:** Encoding is done before scaling so that all numerical features (including target-encoded columns like `pnns_groups_2`) are scaled together.
 
 The final processed data will be available in `data/processed/` with separate train/val/test splits in `data/processed/splits/`.
 

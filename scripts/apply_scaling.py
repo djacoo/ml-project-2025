@@ -15,7 +15,7 @@ from features.scaling import FeatureScaler
 
 def main():
     project_root = Path(__file__).parent.parent
-    input_file = project_root / "data" / "processed" / "openfoodfacts_cleaned.csv"
+    input_file = project_root / "data" / "processed" / "openfoodfacts_encoded.csv"
     output_file = project_root / "data" / "processed" / "openfoodfacts_scaled.csv"
     models_dir = project_root / "models"
     

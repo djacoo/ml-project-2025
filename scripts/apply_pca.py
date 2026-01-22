@@ -19,7 +19,7 @@ def main():
     variance_threshold = 0.95  # Keep 95% of variance
     
     project_root = Path(__file__).parent.parent
-    input_file = project_root / "data" / "processed" / "openfoodfacts_encoded.csv"
+    input_file = project_root / "data" / "processed" / "openfoodfacts_scaled.csv"
     output_file = project_root / "data" / "processed" / "openfoodfacts_pca.csv"
     models_dir = project_root / "models"
     
