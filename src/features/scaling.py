@@ -118,7 +118,7 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
         for feature, scaler in self.scalers_.items():
             if feature in X_scaled.columns:
                 X_scaled[feature] = scaler.transform(
-                    X[feature].values.reshape(-1, 1)
+                    X_scaled[feature].values.reshape(-1, 1)
                 ).flatten()
         
         return X_scaled
