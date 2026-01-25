@@ -133,7 +133,7 @@ class MissingValueHandler:
             print(f"   Dropping {target_missing:,} rows with missing target")
             df_processed = df_processed[df_processed[target_col].notna()]
         else:
-            print("   ✓ No missing values in target variable")
+            print("   No missing values in target variable")
 
         # Step 4: Handle numerical features
         print("\n4. Imputing numerical features...")
@@ -205,7 +205,7 @@ class MissingValueHandler:
                 if missing > 0:
                     print(f"      - {col}: {missing:,} missing")
         else:
-            print("\n   ✓ All missing values handled successfully!")
+            print("\n   All missing values handled successfully!")
 
         print("\n" + "="*70)
 
@@ -232,7 +232,7 @@ class MissingValueHandler:
         with open(output_path, 'w') as f:
             json.dump(report, f, indent=2)
 
-        print(f"\n✓ Imputation report saved to: {output_path}")
+        print(f"\nImputation report saved to: {output_path}")
 
 
 class OutlierHandler:
@@ -435,7 +435,7 @@ class OutlierHandler:
                 print(f"   ⚠️  {col}: {issues:,} issues remaining")
 
         if issues_remaining == 0:
-            print("   ✓ All invalid values successfully removed!")
+            print("   All invalid values successfully removed!")
         else:
             print(f"   ⚠️  WARNING: {issues_remaining:,} issues remaining")
 
@@ -454,7 +454,7 @@ class OutlierHandler:
         with open(output_path, 'w') as f:
             json.dump(self.outlier_report, f, indent=2)
 
-        print(f"\n✓ Outlier removal report saved to: {output_path}")
+        print(f"\nOutlier removal report saved to: {output_path}")
 
 
 def preprocess_dataset(input_path: Path,
@@ -479,7 +479,7 @@ def preprocess_dataset(input_path: Path,
     # Load data
     print(f"\nLoading data from: {input_path}")
     df = pd.read_csv(input_path)
-    print(f"✓ Loaded {len(df):,} rows × {len(df.columns)} columns")
+    print(f"Loaded {len(df):,} rows x {len(df.columns)} columns")
 
     # Initialize handler and process
     handler = MissingValueHandler(threshold_drop_feature=0.95)
@@ -492,7 +492,7 @@ def preprocess_dataset(input_path: Path,
         print("="*70)
         print(f"\nCleaning 'countries' column...")
         df_processed['countries'] = df_processed['countries'].apply(clean_countries_column)
-        print("✓ Countries column cleaned and overwritten")
+        print("Countries column cleaned and overwritten")
     
     # Remove unnecessary columns
     print("\n" + "="*70)
@@ -516,15 +516,15 @@ def preprocess_dataset(input_path: Path,
     
     if columns_to_remove:
         df_processed = df_processed.drop(columns=columns_to_remove)
-        print(f"\n✓ Removed {len(columns_to_remove)} column(s)")
+        print(f"\nRemoved {len(columns_to_remove)} column(s)")
     else:
-        print("\n✓ No columns to remove")
+        print("\nNo columns to remove")
     
     # Save processed data
     print(f"\nSaving processed data to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_processed.to_csv(output_path, index=False)
-    print(f"✓ Processed data saved successfully")
+    print(f"Processed data saved successfully")
 
     # Save report
     if report_path:
