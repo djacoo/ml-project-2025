@@ -74,7 +74,15 @@ def main():
     # Add target back (aligned with processed data indices)
     if target_col not in X_processed.columns:
         # Align y with X_processed indices (some rows may have been removed)
-        y_aligned = y.loc[X_processed.index]
+        # Use reindex for safer alignment, then check for missing indices
+        y_aligned = y.reindex(X_processed.index)
+        if y_aligned.isna().any():
+            missing_indices = y_aligned.index[y_aligned.isna()]
+            raise ValueError(
+                f"Some indices in X_processed not found in y. "
+                f"Missing indices: {missing_indices.tolist()[:10]}..."
+                if len(missing_indices) > 10 else f"Missing indices: {missing_indices.tolist()}"
+            )
         X_processed[target_col] = y_aligned.values
     
     # Save processed data
