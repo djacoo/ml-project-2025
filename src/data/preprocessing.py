@@ -246,10 +246,21 @@ class OutlierHandler:
     - Validate energy consistency with macronutrients
     """
 
-    def __init__(self):
-        """Initialize the outlier handler."""
+    def __init__(self, remove_statistical_outliers: bool = False):
+        """
+        Initialize the outlier handler.
+        
+        Parameters
+        ----------
+        remove_statistical_outliers : bool, default=False
+            Whether to remove statistical outliers (3×IQR method).
+            Default is False because statistical outliers in nutritional data
+            often represent valid product categories (e.g., high sugar in candy,
+            high fat in butter), not measurement errors.
+        """
         self.removal_stats = {}
         self.outlier_report = {}
+        self.remove_statistical_outliers = remove_statistical_outliers
 
         # Define valid ranges for nutritional values (per 100g)
         # Note: energy_100g removed (redundant with energy-kcal_100g)
@@ -402,64 +413,69 @@ class OutlierHandler:
 
                 print(f"   - {col:25s}: Removed {invalid_count:,} rows")
 
-        # Step 3: Remove statistical outliers (very conservative - only extreme cases)
-        print("\n3. Removing extreme statistical outliers...")
+        # Step 3: Remove statistical outliers (optional, controlled by flag)
+        if self.remove_statistical_outliers:
+            print("\n3. Removing extreme statistical outliers...")
 
-        nutritional_cols = list(self.valid_ranges.keys())
-        existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
+            nutritional_cols = list(self.valid_ranges.keys())
+            existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
 
-        # Create combined mask for all statistical outliers
-        combined_extreme_mask = pd.Series(False, index=df_clean.index)
+            # Create combined mask for all statistical outliers
+            combined_extreme_mask = pd.Series(False, index=df_clean.index)
 
-        for col in existing_cols:
-            # Skip features with highly skewed distributions where statistical outliers are valid
-            if col in self.exclude_from_statistical_removal:
-                print(f"   - {col:25s}: Skipped (highly skewed, statistical outliers are valid)")
-                continue
-            # Use 3*IQR for very extreme outliers only
-            Q1 = df_clean[col].quantile(0.25)
-            Q3 = df_clean[col].quantile(0.75)
-            IQR = Q3 - Q1
-            statistical_lower = Q1 - 3 * IQR
-            statistical_upper = Q3 + 3 * IQR
+            for col in existing_cols:
+                # Skip features with highly skewed distributions where statistical outliers are valid
+                if col in self.exclude_from_statistical_removal:
+                    print(f"   - {col:25s}: Skipped (highly skewed, statistical outliers are valid)")
+                    continue
+                # Use 3*IQR for very extreme outliers only
+                Q1 = df_clean[col].quantile(0.25)
+                Q3 = df_clean[col].quantile(0.75)
+                IQR = Q3 - Q1
+                statistical_lower = Q1 - 3 * IQR
+                statistical_upper = Q3 + 3 * IQR
 
-            # Get valid physical ranges
-            min_val, max_val = self.valid_ranges[col]
-            
-            # Clamp statistical bounds to valid physical ranges
-            # Lower bound: clamp to 0 (negative values already removed in Step 2)
-            # Upper bound: use statistical upper, but don't exceed physical max
-            lower_bound = max(0, statistical_lower)
-            upper_bound = min(statistical_upper, max_val)
-            
-            # Only remove upper outliers (very high values that are statistically extreme)
-            # Lower outliers (negative/very low) already handled in Step 2
-            # Note: We're conservative - high values (e.g., 60g sugars, 84g fat) might be
-            # statistically unusual but physically valid (candy, butter, etc.)
-            extreme_mask = (df_clean[col] > upper_bound)
-            extreme_count = extreme_mask.sum()
-
-            if extreme_count > 0:
-                # Combine with overall mask (a row is outlier if outlier in any column)
-                combined_extreme_mask = combined_extreme_mask | extreme_mask
+                # Get valid physical ranges
+                min_val, max_val = self.valid_ranges[col]
                 
-                if col not in removal_reasons:
-                    removal_reasons[col] = {
-                        'count': int(extreme_count),
-                        'reason': f'Extreme statistical outlier (3*IQR, upper bound: {upper_bound:.2f})'
-                    }
+                # Clamp statistical bounds to valid physical ranges
+                # Lower bound: clamp to 0 (negative values already removed in Step 2)
+                # Upper bound: use statistical upper, but don't exceed physical max
+                lower_bound = max(0, statistical_lower)
+                upper_bound = min(statistical_upper, max_val)
+                
+                # Only remove upper outliers (very high values that are statistically extreme)
+                # Lower outliers (negative/very low) already handled in Step 2
+                # Note: We're conservative - high values (e.g., 60g sugars, 84g fat) might be
+                # statistically unusual but physically valid (candy, butter, etc.)
+                extreme_mask = (df_clean[col] > upper_bound)
+                extreme_count = extreme_mask.sum()
 
-                print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
-                      f"(removing values > {upper_bound:.2f}, "
-                      f"IQR: {statistical_lower:.2f} - {statistical_upper:.2f}, "
-                      f"clamped: {lower_bound:.2f} - {upper_bound:.2f})")
+                if extreme_count > 0:
+                    # Combine with overall mask (a row is outlier if outlier in any column)
+                    combined_extreme_mask = combined_extreme_mask | extreme_mask
+                    
+                    if col not in removal_reasons:
+                        removal_reasons[col] = {
+                            'count': int(extreme_count),
+                            'reason': f'Extreme statistical outlier (3*IQR, upper bound: {upper_bound:.2f})'
+                        }
 
-        # Remove all statistical outliers at once
-        if combined_extreme_mask.any():
-            statistical_outliers_count = combined_extreme_mask.sum()
-            df_clean = df_clean[~combined_extreme_mask]
-            rows_removed += statistical_outliers_count
-            print(f"\n   Removed {statistical_outliers_count:,} rows with statistical outliers")
+                    print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
+                          f"(removing values > {upper_bound:.2f}, "
+                          f"IQR: {statistical_lower:.2f} - {statistical_upper:.2f}, "
+                          f"clamped: {lower_bound:.2f} - {upper_bound:.2f})")
+
+            # Remove all statistical outliers at once
+            if combined_extreme_mask.any():
+                statistical_outliers_count = combined_extreme_mask.sum()
+                df_clean = df_clean[~combined_extreme_mask]
+                rows_removed += statistical_outliers_count
+                print(f"\n   Removed {statistical_outliers_count:,} rows with statistical outliers")
+            else:
+                print("\n   No statistical outliers to remove")
+        else:
+            print("\n3. Statistical outlier removal skipped (remove_statistical_outliers=False)")
 
         # Step 4: Validate energy consistency (optional check)
         # Note: Energy consistency check removed (energy_100g column removed)

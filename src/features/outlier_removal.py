@@ -103,6 +103,10 @@ class OutlierRemovalTransformer(BaseEstimator, TransformerMixin):
     ----------
     target_col : str, default='nutriscore_grade'
         Target column name. Preserved during transformation.
+    remove_statistical_outliers : bool, default=False
+        Whether to remove statistical outliers (3×IQR method).
+        Default is False because statistical outliers in nutritional data
+        often represent valid product categories, not measurement errors.
     
     Attributes
     ----------
@@ -114,12 +118,17 @@ class OutlierRemovalTransformer(BaseEstimator, TransformerMixin):
     Removal strategy:
     - Domain rules: negative values, values > 100g per 100g (macros),
       energy > 3000 kcal, salt > 50g
-    - Statistical: IQR method with 3×IQR threshold
+    - Statistical: IQR method with 3×IQR threshold (optional, controlled by flag)
     """
     
-    def __init__(self, target_col: str = 'nutriscore_grade'):
+    def __init__(
+        self, 
+        target_col: str = 'nutriscore_grade',
+        remove_statistical_outliers: bool = False
+    ):
         self.target_col = target_col
-        self.handler = OutlierHandler()
+        self.remove_statistical_outliers = remove_statistical_outliers
+        self.handler = OutlierHandler(remove_statistical_outliers=remove_statistical_outliers)
         self.rows_removed_ = 0
     
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'OutlierRemovalTransformer':

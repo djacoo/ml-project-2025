@@ -26,6 +26,7 @@ def create_preprocessing_pipeline(
     target_col: str = 'nutriscore_grade',
     include_feature_engineering: bool = True,
     feature_engineering_kwargs: Optional[dict] = None,
+    remove_statistical_outliers: bool = False,
     include_pca: bool = True
 ) -> Pipeline:
     """
@@ -51,6 +52,10 @@ def create_preprocessing_pipeline(
         Keyword arguments to pass to FeatureEngineer (e.g., 
         {'add_ratios': True, 'add_energy_density': True}).
         If None, uses FeatureEngineer defaults.
+    remove_statistical_outliers : bool, default=False
+        Whether to remove statistical outliers (3×IQR method).
+        Default is False because statistical outliers in nutritional data
+        often represent valid product categories, not measurement errors.
     include_pca : bool, default=True
         Whether to include PCA dimensionality reduction step.
     
@@ -65,7 +70,10 @@ def create_preprocessing_pipeline(
             threshold_drop_feature=missing_threshold,
             target_col=target_col
         )),
-        ('outlier_removal', OutlierRemovalTransformer(target_col=target_col)),
+        ('outlier_removal', OutlierRemovalTransformer(
+            target_col=target_col,
+            remove_statistical_outliers=remove_statistical_outliers
+        )),
         ('encoding', FeatureEncoder(top_n_countries=top_n_countries)),
     ]
     
@@ -112,6 +120,10 @@ class PreprocessingPipeline:
         Whether to include feature engineering step (derived features).
     feature_engineering_kwargs : dict, optional
         Keyword arguments to pass to FeatureEngineer.
+    remove_statistical_outliers : bool, default=False
+        Whether to remove statistical outliers (3×IQR method).
+        Default is False because statistical outliers in nutritional data
+        often represent valid product categories, not measurement errors.
     include_pca : bool, default=True
         Whether to include PCA step.
     
@@ -133,6 +145,7 @@ class PreprocessingPipeline:
         preserve_cols: Optional[List[str]] = None,
         include_feature_engineering: bool = True,
         feature_engineering_kwargs: Optional[dict] = None,
+        remove_statistical_outliers: bool = False,
         include_pca: bool = True
     ):
         self.target_col = target_col
@@ -148,6 +161,7 @@ class PreprocessingPipeline:
             target_col=target_col,
             include_feature_engineering=include_feature_engineering,
             feature_engineering_kwargs=feature_engineering_kwargs,
+            remove_statistical_outliers=remove_statistical_outliers,
             include_pca=include_pca
         )
     
