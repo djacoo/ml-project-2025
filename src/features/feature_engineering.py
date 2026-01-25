@@ -105,6 +105,16 @@ class FeatureEngineer(BaseEstimator, TransformerMixin):
         if self.add_boolean_flags:
             X_engineered = self._add_boolean_flags(X_engineered)
         
+        # Impute any NaN values created by feature engineering (e.g., division by zero in ratios)
+        # This ensures compatibility with downstream transformers like PCA
+        derived_cols = [col for col in X_engineered.columns if col not in X.columns]
+        if derived_cols:
+            for col in derived_cols:
+                if X_engineered[col].isna().any():
+                    # For ratio features, impute with 0 (when denominator is 0, ratio is undefined)
+                    # For other features, impute with 0 as well
+                    X_engineered[col] = X_engineered[col].fillna(0.0)
+        
         return X_engineered
     
     def _add_ratios(self, X: pd.DataFrame) -> pd.DataFrame:

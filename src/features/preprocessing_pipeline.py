@@ -12,6 +12,7 @@ from sklearn.base import BaseEstimator
 
 from features.outlier_removal import MissingValueTransformer, OutlierRemovalTransformer
 from features.encoding import FeatureEncoder
+from features.feature_engineering import FeatureEngineer
 from features.scaling import FeatureScaler
 from features.dimensionality_reduction import FeatureReducer
 
@@ -23,6 +24,8 @@ def create_preprocessing_pipeline(
     scaling_skew_threshold: float = 1.0,
     pca_variance_threshold: float = 0.95,
     target_col: str = 'nutriscore_grade',
+    include_feature_engineering: bool = True,
+    feature_engineering_kwargs: Optional[dict] = None,
     include_pca: bool = True
 ) -> Pipeline:
     """
@@ -42,6 +45,12 @@ def create_preprocessing_pipeline(
         Minimum cumulative explained variance for PCA component selection.
     target_col : str, default='nutriscore_grade'
         Target column name.
+    include_feature_engineering : bool, default=True
+        Whether to include feature engineering step (derived features).
+    feature_engineering_kwargs : dict, optional
+        Keyword arguments to pass to FeatureEngineer (e.g., 
+        {'add_ratios': True, 'add_energy_density': True}).
+        If None, uses FeatureEngineer defaults.
     include_pca : bool, default=True
         Whether to include PCA dimensionality reduction step.
     
@@ -49,7 +58,7 @@ def create_preprocessing_pipeline(
     -------
     pipeline : sklearn.pipeline.Pipeline
         Fitted pipeline with steps: missing_values, outlier_removal,
-        encoding, scaling, [pca].
+        encoding, [feature_engineering], scaling, [pca].
     """
     steps = [
         ('missing_values', MissingValueTransformer(
@@ -58,8 +67,14 @@ def create_preprocessing_pipeline(
         )),
         ('outlier_removal', OutlierRemovalTransformer(target_col=target_col)),
         ('encoding', FeatureEncoder(top_n_countries=top_n_countries)),
-        ('scaling', FeatureScaler(method=scaling_method, skew_threshold=scaling_skew_threshold)),
     ]
+    
+    # Add feature engineering step if enabled
+    if include_feature_engineering:
+        fe_kwargs = feature_engineering_kwargs or {}
+        steps.append(('feature_engineering', FeatureEngineer(**fe_kwargs)))
+    
+    steps.append(('scaling', FeatureScaler(method=scaling_method, skew_threshold=scaling_skew_threshold)))
     
     if include_pca:
         steps.append(('pca', FeatureReducer(variance_threshold=pca_variance_threshold)))
@@ -93,6 +108,10 @@ class PreprocessingPipeline:
         Split group column name (train/val/test).
     preserve_cols : list[str], optional
         Additional columns to preserve (e.g., ['product_name', 'brands']).
+    include_feature_engineering : bool, default=True
+        Whether to include feature engineering step (derived features).
+    feature_engineering_kwargs : dict, optional
+        Keyword arguments to pass to FeatureEngineer.
     include_pca : bool, default=True
         Whether to include PCA step.
     
@@ -112,6 +131,8 @@ class PreprocessingPipeline:
         target_col: str = 'nutriscore_grade',
         split_group_col: str = 'split_group',
         preserve_cols: Optional[List[str]] = None,
+        include_feature_engineering: bool = True,
+        feature_engineering_kwargs: Optional[dict] = None,
         include_pca: bool = True
     ):
         self.target_col = target_col
@@ -125,6 +146,8 @@ class PreprocessingPipeline:
             scaling_skew_threshold=scaling_skew_threshold,
             pca_variance_threshold=pca_variance_threshold,
             target_col=target_col,
+            include_feature_engineering=include_feature_engineering,
+            feature_engineering_kwargs=feature_engineering_kwargs,
             include_pca=include_pca
         )
     
