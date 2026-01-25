@@ -71,6 +71,12 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
         numerical_cols = X.select_dtypes(include=[np.number]).columns
         features_to_scale = [col for col in numerical_cols if col not in METADATA_COLS]
         
+        if len(features_to_scale) == 0:
+            raise ValueError(
+                "No numerical features found to scale. "
+                "Ensure input contains numerical columns (excluding metadata)."
+            )
+        
         for feature in features_to_scale:
             if self.method == 'auto':
                 scaler = self._select_scaler_by_skewness(X[feature])

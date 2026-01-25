@@ -132,6 +132,15 @@ class FeatureReducer(BaseEstimator, TransformerMixin):
         if self.pca_ is None:
             raise ValueError("PCA has not been fitted. Call fit() first.")
         
+        # Validate that all required feature columns are present
+        missing_cols = [col for col in self.feature_columns_ if col not in X.columns]
+        if missing_cols:
+            raise ValueError(
+                f"Missing feature columns required for PCA transformation: {missing_cols}. "
+                f"Expected columns: {self.feature_columns_[:10]}..."
+                if len(self.feature_columns_) > 10 else f"Expected columns: {self.feature_columns_}"
+            )
+        
         X_array = X[self.feature_columns_].values
         X_transformed = self.pca_.transform(X_array)
         
