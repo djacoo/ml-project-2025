@@ -262,6 +262,33 @@ class OutlierHandler:
             'proteins_100g': (0, 100),         # 0-100g per 100g
             'salt_100g': (0, 50),              # 0-50g per 100g (very salty max)
         }
+        
+        # Features to exclude from statistical outlier removal
+        # These have highly skewed distributions where "statistical outliers" are actually valid
+        # 
+        # Rationale:
+        # - fiber_100g: Many products have 0-2g, but healthy products (cereals, legumes) can have 5-20g.
+        #   Removing > 4g would eliminate valid healthy products.
+        # - sugars_100g: High values (60g+) are common in candy, honey, syrups - these are valid products.
+        # - fat_100g: High values (80g+) are common in butter (~80g), oils (~100g) - valid products.
+        # - saturated-fat_100g: High values (25g+) are common in butter, cheese - valid products.
+        # - proteins_100g: High values (40g+) are common in meat, fish, protein powders - valid products.
+        # - salt_100g: High values (5g+) are common in salty snacks, cured meats - valid products.
+        #
+        # Strategy: Only remove values that violate physical constraints (Step 2).
+        # Statistical outliers in nutritional data often represent valid product categories,
+        # not measurement errors. Removing them would bias the dataset against certain food types.
+        self.exclude_from_statistical_removal = {
+            'fiber_100g',      # Highly skewed, high values are healthy products
+            'sugars_100g',     # High values are common in candy, honey, syrups
+            'fat_100g',        # High values are common in butter, oils
+            'saturated-fat_100g',  # High values are common in butter, cheese
+            'proteins_100g',   # High values are common in meat, protein powders
+            'salt_100g'        # High values are common in salty snacks, cured meats
+        }
+        # fiber_100g: many products have 0-2g, but healthy products can have 5-20g
+        # Statistical outliers (e.g., > 4g) are actually valid and should be kept
+        self.exclude_from_statistical_removal = {'fiber_100g'}
 
     def detect_outliers(self, df: pd.DataFrame) -> Dict:
         """
@@ -388,15 +415,31 @@ class OutlierHandler:
         combined_extreme_mask = pd.Series(False, index=df_clean.index)
 
         for col in existing_cols:
+            # Skip features with highly skewed distributions where statistical outliers are valid
+            if col in self.exclude_from_statistical_removal:
+                print(f"   - {col:25s}: Skipped (highly skewed, statistical outliers are valid)")
+                continue
             # Use 3*IQR for very extreme outliers only
             Q1 = df_clean[col].quantile(0.25)
             Q3 = df_clean[col].quantile(0.75)
             IQR = Q3 - Q1
-            lower_bound = Q1 - 3 * IQR
-            upper_bound = Q3 + 3 * IQR
+            statistical_lower = Q1 - 3 * IQR
+            statistical_upper = Q3 + 3 * IQR
 
-            # Identify extreme outliers
-            extreme_mask = ((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound))
+            # Get valid physical ranges
+            min_val, max_val = self.valid_ranges[col]
+            
+            # Clamp statistical bounds to valid physical ranges
+            # Lower bound: clamp to 0 (negative values already removed in Step 2)
+            # Upper bound: use statistical upper, but don't exceed physical max
+            lower_bound = max(0, statistical_lower)
+            upper_bound = min(statistical_upper, max_val)
+            
+            # Only remove upper outliers (very high values that are statistically extreme)
+            # Lower outliers (negative/very low) already handled in Step 2
+            # Note: We're conservative - high values (e.g., 60g sugars, 84g fat) might be
+            # statistically unusual but physically valid (candy, butter, etc.)
+            extreme_mask = (df_clean[col] > upper_bound)
             extreme_count = extreme_mask.sum()
 
             if extreme_count > 0:
@@ -406,11 +449,13 @@ class OutlierHandler:
                 if col not in removal_reasons:
                     removal_reasons[col] = {
                         'count': int(extreme_count),
-                        'reason': f'Extreme statistical outlier (3*IQR)'
+                        'reason': f'Extreme statistical outlier (3*IQR, upper bound: {upper_bound:.2f})'
                     }
 
                 print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
-                      f"(range: {lower_bound:.2f} - {upper_bound:.2f})")
+                      f"(removing values > {upper_bound:.2f}, "
+                      f"IQR: {statistical_lower:.2f} - {statistical_upper:.2f}, "
+                      f"clamped: {lower_bound:.2f} - {upper_bound:.2f})")
 
         # Remove all statistical outliers at once
         if combined_extreme_mask.any():
