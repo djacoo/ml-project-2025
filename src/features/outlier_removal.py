@@ -81,6 +81,17 @@ class MissingValueTransformer(BaseEstimator, TransformerMixin):
         X_processed : pd.DataFrame
             Features with missing values handled. Shape may differ due to
             row/column removal.
+        
+        Raises
+        ------
+        ValueError
+            If target_col is required but not found in X and y is None.
+        
+        Notes
+        -----
+        Rows with missing target variable are dropped. Features with >95% missing
+        data are removed. Numerical features are imputed with median, categorical
+        with 'unknown', and additives_n with 0.
         """
         X_work = X.copy()
         if self.target_col not in X_work.columns and y is not None:
@@ -235,6 +246,17 @@ class OutlierRemovalTransformer(BaseEstimator, TransformerMixin):
         -------
         X_clean : pd.DataFrame
             Features with outliers removed. Shape (n_samples - n_removed, n_features).
+        
+        Notes
+        -----
+        Removal strategy:
+        - Step 1: Analyze outliers (if not done in fit)
+        - Step 2: Remove invalid values (negative, outside valid ranges)
+        - Step 3: Remove statistical outliers (if remove_statistical_outliers=True)
+        - Step 4: Final verification
+        
+        Invalid values are always removed. Statistical outliers are only removed
+        if remove_statistical_outliers=True (default: False).
         """
         df_clean = X.copy()
         initial_rows = len(df_clean)

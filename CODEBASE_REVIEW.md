@@ -234,6 +234,14 @@ def transform(self, X: pd.DataFrame) -> pd.DataFrame:
 - Notes
 - Examples (dove utile)
 
+**Status**: ✅ **[MIGLIORATO]** - Aggiunte sezioni Raises e Notes ai docstring principali:
+- `PreprocessingPipeline.fit()` e `transform()`
+- `MissingValueTransformer.transform()`
+- `OutlierRemovalTransformer.transform()`
+- `FeatureEncoder.fit()`
+
+I docstring principali ora seguono il formato NumPy/SciPy standard.
+
 ---
 
 ## 📋 RIEPILOGO PRIORITÀ

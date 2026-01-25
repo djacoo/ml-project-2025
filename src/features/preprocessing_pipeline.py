@@ -183,6 +183,19 @@ class PreprocessingPipeline:
         -------
         self : PreprocessingPipeline
             Returns self for method chaining.
+        
+        Raises
+        ------
+        ValueError
+            If target encoding is required but y is None and target_col not in X.
+        UserWarning
+            If split_group column is expected but not found in data.
+        
+        Notes
+        -----
+        The pipeline automatically extracts the train split if split_group column
+        exists, ensuring transformers are fitted only on training data to prevent
+        data leakage.
         """
         # Step 1: Extract train split if split_group exists
         X_fit, y_fit = self._extract_train_split(X, y)
@@ -305,13 +318,24 @@ class PreprocessingPipeline:
         ----------
         X : pd.DataFrame of shape (n_samples, n_features)
             Input features to transform. May contain target and metadata columns.
-        y : pd.Series, optional
+        y : pd.Series of shape (n_samples,), optional
             Target variable. Used only if target_col not in X.
         
         Returns
         -------
         X_transformed : pd.DataFrame
             Transformed features with metadata columns preserved.
+            Shape may differ from input due to row removal in preprocessing steps.
+        
+        Raises
+        ------
+        ValueError
+            If pipeline has not been fitted (call fit() first).
+        
+        Notes
+        -----
+        Metadata columns (target, split_group, preserve_cols) are preserved
+        through the transformation and added back to the output.
         """
         # Step 1: Separate metadata and features
         metadata_cols = [self.split_group_col] + self.preserve_cols

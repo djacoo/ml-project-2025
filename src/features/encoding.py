@@ -66,6 +66,13 @@ class FeatureEncoder(BaseEstimator, TransformerMixin):
         ------
         ValueError
             If y is None when encoding pnns_groups_2 (TargetEncoder requirement).
+        
+        Notes
+        -----
+        Encoding strategies:
+        - countries: MultiLabelBinarizer with top N countries (others ignored)
+        - pnns_groups_1: OneHotEncoder with unknown category handling
+        - pnns_groups_2: TargetEncoder requiring y during fit
         """
         self.encoders_ = {}
         self.top_countries_ = None
