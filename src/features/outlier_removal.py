@@ -1,13 +1,9 @@
 """
-Outlier removal transformers for scikit-learn Pipeline compatibility.
+Outlier detection and removal transformers.
 
-This module provides scikit-learn compatible transformers for:
-- Missing value handling
-- Outlier detection and removal
-
-All transformers follow the scikit-learn API (BaseEstimator, TransformerMixin).
+Provides scikit-learn compatible transformers for missing value handling and
+outlier removal following domain-specific rules and statistical methods.
 """
-
 import pandas as pd
 from typing import Optional
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -17,118 +13,155 @@ from data.preprocessing import MissingValueHandler, OutlierHandler
 
 class MissingValueTransformer(BaseEstimator, TransformerMixin):
     """
-    Wrapper for MissingValueHandler to make it compatible with scikit-learn Pipeline.
+    Handles missing values through imputation and feature/row removal.
     
-    This transformer handles missing values by:
-    - Dropping features with >95% missing data (configurable threshold)
-    - Dropping rows with missing target variable
-    - Imputing numerical features with median
-    - Imputing additives_n with 0
-    - Handling categorical features with 'unknown' placeholder
-    
-    Parameters:
-    -----------
+    Parameters
+    ----------
     threshold_drop_feature : float, default=0.95
-        Drop features with missing percentage above this threshold
+        Drop features with missing percentage above this threshold.
     target_col : str, default='nutriscore_grade'
-        Name of the target column
+        Target column name. Rows with missing target are dropped.
+    
+    Attributes
+    ----------
+    dropped_features_ : list[str]
+        Features dropped due to high missing percentage.
+    
+    Notes
+    -----
+    Imputation strategy:
+    - Numerical features: median imputation
+    - additives_n: zero imputation
+    - Categorical features: 'unknown' placeholder
     """
     
-    def __init__(self, threshold_drop_feature: float = 0.95, target_col: str = 'nutriscore_grade'):
+    def __init__(
+        self, threshold_drop_feature: float = 0.95, target_col: str = 'nutriscore_grade'
+    ):
         self.threshold_drop_feature = threshold_drop_feature
         self.target_col = target_col
         self.handler = MissingValueHandler(threshold_drop_feature=threshold_drop_feature)
-        self.dropped_features_ = None
-        
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None):
+        self.dropped_features_: Optional[list] = None
+    
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'MissingValueTransformer':
         """
-        Fit the missing value handler (analyzes missing patterns).
+        Analyze missing value patterns.
         
-        Args:
-            X: Input dataframe
-            y: Target series (optional, used to identify target column)
-            
-        Returns:
-            self
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features.
+        y : pd.Series, optional
+            Ignored. Present for API compatibility.
+        
+        Returns
+        -------
+        self : MissingValueTransformer
+            Returns self for method chaining.
         """
-        # Analyze missing values
         self.handler.analyze_missing_values(X)
         self.dropped_features_ = self.handler.dropped_features.copy()
         return self
     
-    def transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
+    def transform(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
         """
-        Transform data by handling missing values.
+        Handle missing values through imputation and removal.
         
-        Args:
-            X: Input dataframe
-            y: Target series (optional, will be added to X if target_col not in X)
-            
-        Returns:
-            Dataframe with missing values handled
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features to transform.
+        y : pd.Series of shape (n_samples,), optional
+            Target variable. Added to X if target_col not present.
+        
+        Returns
+        -------
+        X_processed : pd.DataFrame
+            Features with missing values handled. Shape may differ due to
+            row/column removal.
         """
-        # If target column is not in X but y is provided, add it temporarily
         X_work = X.copy()
         if self.target_col not in X_work.columns and y is not None:
             X_work[self.target_col] = y.values
         
         return self.handler.handle_missing_values(X_work, target_col=self.target_col)
     
-    def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
+    def fit_transform(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
         """Fit and transform in one step."""
-        return self.fit(X, y).transform(X)
+        return self.fit(X, y).transform(X, y)
 
 
 class OutlierRemovalTransformer(BaseEstimator, TransformerMixin):
     """
-    Wrapper for OutlierHandler to make it compatible with scikit-learn Pipeline.
+    Removes outliers using domain rules and statistical methods.
     
-    This transformer removes outliers by:
-    - Removing negative values (nutritional values cannot be negative)
-    - Applying domain-specific valid ranges (e.g., fat <= 100g per 100g)
-    - Removing statistical outliers using IQR method (3×IQR threshold)
-    
-    Parameters:
-    -----------
+    Parameters
+    ----------
     target_col : str, default='nutriscore_grade'
-        Name of the target column
+        Target column name. Preserved during transformation.
+    
+    Attributes
+    ----------
+    rows_removed_ : int
+        Number of rows removed during last transform call.
+    
+    Notes
+    -----
+    Removal strategy:
+    - Domain rules: negative values, values > 100g per 100g (macros),
+      energy > 3000 kcal, salt > 50g
+    - Statistical: IQR method with 3×IQR threshold
     """
     
     def __init__(self, target_col: str = 'nutriscore_grade'):
         self.target_col = target_col
         self.handler = OutlierHandler()
         self.rows_removed_ = 0
-        
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None):
+    
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'OutlierRemovalTransformer':
         """
-        Fit the outlier handler (analyzes outliers).
+        Analyze outlier patterns.
         
-        Args:
-            X: Input dataframe
-            y: Target series (optional, not used)
-            
-        Returns:
-            self
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features.
+        y : pd.Series, optional
+            Ignored. Present for API compatibility.
+        
+        Returns
+        -------
+        self : OutlierRemovalTransformer
+            Returns self for method chaining.
         """
-        # Analyze outliers
         self.handler.detect_outliers(X)
         return self
     
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform data by removing outliers.
+        Remove outliers from data.
         
-        Args:
-            X: Input dataframe
-            
-        Returns:
-            Dataframe with outliers removed
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features to transform.
+        
+        Returns
+        -------
+        X_clean : pd.DataFrame
+            Features with outliers removed. Shape (n_samples - n_removed, n_features).
         """
         initial_rows = len(X)
         df_clean = self.handler.remove_outliers(X, target_col=self.target_col)
         self.rows_removed_ = initial_rows - len(df_clean)
         return df_clean
     
-    def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
+    def fit_transform(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
         """Fit and transform in one step."""
         return self.fit(X, y).transform(X)

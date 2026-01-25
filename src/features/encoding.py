@@ -1,134 +1,222 @@
+"""
+Categorical feature encoding for Nutri-Score prediction.
+
+Implements encoding strategies for multi-label (countries), one-hot (pnns_groups_1),
+and target encoding (pnns_groups_2) following scikit-learn Transformer API.
+"""
 import joblib
 import pandas as pd
 import numpy as np
+from collections import Counter
+from typing import Optional, Dict, List
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import OneHotEncoder, TargetEncoder, MultiLabelBinarizer
 
-CATEGORICAL_FEATURES = [
-    "countries",
-    "pnns_groups_1",
-    "pnns_groups_2"
-]
+
+CATEGORICAL_FEATURES = ["countries", "pnns_groups_1", "pnns_groups_2"]
+
 
 class FeatureEncoder(BaseEstimator, TransformerMixin):
     """
-    Feature encoder for categorical features
+    Encodes categorical features using strategy-specific encoders.
     
-    Encoding strategies:
-    - countries: MultiLabelBinarizer (top N countries, configurable)
-    - pnns_groups_1: OneHotEncoder
-    - pnns_groups_2: TargetEncoder
-    
-    Parameters:
-    -----------
+    Parameters
+    ----------
     top_n_countries : int, default=15
-        Number of top countries to keep for MultiLabelBinarizer encoding
-    """
-    def __init__(self, top_n_countries=15):
-        self.top_n_countries = top_n_countries
-        self.encoders = {}
-        self.top_countries = None  # Store top countries for countries feature
+        Number of most frequent countries to retain for multi-label encoding.
+        Remaining countries are ignored during transformation.
     
-    def fit(self, X, y=None):
-        # reset encoders dictionary and top_countries
-        self.encoders = {}
-        self.top_countries = None
+    Attributes
+    ----------
+    encoders_ : dict[str, sklearn.preprocessing.Transformer]
+        Fitted encoders for each categorical feature.
+    top_countries_ : list[str] or None
+        List of top N countries selected during fit (for countries feature only).
+    
+    Notes
+    -----
+    Encoding strategies:
+    - countries: MultiLabelBinarizer with top N countries (others ignored)
+    - pnns_groups_1: OneHotEncoder with unknown category handling
+    - pnns_groups_2: TargetEncoder requiring y during fit
+    """
+    
+    def __init__(self, top_n_countries: int = 15):
+        self.top_n_countries = top_n_countries
+        self.encoders_: Dict[str, BaseEstimator] = {}
+        self.top_countries_: Optional[List[str]] = None
+    
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'FeatureEncoder':
+        """
+        Fit encoders for each categorical feature.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features containing categorical columns.
+        y : pd.Series of shape (n_samples,), optional
+            Target variable. Required for TargetEncoder (pnns_groups_2).
+        
+        Returns
+        -------
+        self : FeatureEncoder
+            Returns self for method chaining.
+        
+        Raises
+        ------
+        ValueError
+            If y is None when encoding pnns_groups_2 (TargetEncoder requirement).
+        """
+        self.encoders_ = {}
+        self.top_countries_ = None
         
         for feature in CATEGORICAL_FEATURES:
             if feature not in X.columns:
-                continue  
+                continue
             
-            # Prepare data and configure encoder based on feature type
             if feature == "countries":
-                # Convert comma-separated strings to lists of countries
-                data = X[feature].apply(lambda x: [c.strip() for c in str(x).split(',') if c.strip() and c.strip() != 'unknown']).tolist()
-                
-                # Count frequency of each country to find top N
-                from collections import Counter
-                country_counts = Counter()
-                for country_list in data:
-                    country_counts.update(country_list)
-                
-                # Get top N countries
-                top_countries = [country for country, _ in country_counts.most_common(self.top_n_countries)]
-                self.top_countries = top_countries
-                
-                # Use MultiLabelBinarizer with only top N countries
-                encoder = MultiLabelBinarizer(classes=top_countries)
-                # Filter data to only include top countries
-                filtered_data = [[c for c in country_list if c in self.top_countries] for country_list in data]
-                encoder.fit(filtered_data)
-                self.encoders[feature] = encoder
+                self._fit_countries_encoder(X[feature])
             elif feature == "pnns_groups_1":
-                encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
-                data = X[feature].values.reshape(-1, 1)
-                encoder.fit(data)
-                self.encoders[feature] = encoder
+                self._fit_onehot_encoder(X[feature])
             elif feature == "pnns_groups_2":
-                encoder = TargetEncoder(smooth="auto")
-                data = X[feature].values.reshape(-1, 1)
-                if y is not None:
-                    encoder.fit(data, y)
-                    self.encoders[feature] = encoder
-                else:
-                    raise ValueError("TargetEncoder for "+ feature + " requires y parameter")
+                self._fit_target_encoder(X[feature], y)
         
         return self
-
-    def transform(self, X):
+    
+    def _fit_countries_encoder(self, X_countries: pd.Series) -> None:
+        """Fit MultiLabelBinarizer on top N countries."""
+        country_lists = X_countries.apply(
+            lambda x: [c.strip() for c in str(x).split(',') 
+                      if c.strip() and c.strip() != 'unknown']
+        ).tolist()
+        
+        country_counts = Counter()
+        for country_list in country_lists:
+            country_counts.update(country_list)
+        
+        self.top_countries_ = [
+            country for country, _ in country_counts.most_common(self.top_n_countries)
+        ]
+        
+        filtered_data = [
+            [c for c in country_list if c in self.top_countries_]
+            for country_list in country_lists
+        ]
+        
+        encoder = MultiLabelBinarizer(classes=self.top_countries_)
+        encoder.fit(filtered_data)
+        self.encoders_["countries"] = encoder
+    
+    def _fit_onehot_encoder(self, X_feature: pd.Series) -> None:
+        """Fit OneHotEncoder with unknown category handling."""
+        encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+        encoder.fit(X_feature.values.reshape(-1, 1))
+        self.encoders_["pnns_groups_1"] = encoder
+    
+    def _fit_target_encoder(self, X_feature: pd.Series, y: Optional[pd.Series]) -> None:
+        """Fit TargetEncoder requiring target variable."""
+        if y is None:
+            raise ValueError("TargetEncoder for pnns_groups_2 requires y parameter")
+        
+        encoder = TargetEncoder(smooth="auto")
+        encoder.fit(X_feature.values.reshape(-1, 1), y)
+        self.encoders_["pnns_groups_2"] = encoder
+    
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transform categorical features using fitted encoders.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features to transform.
+        
+        Returns
+        -------
+        X_encoded : pd.DataFrame of shape (n_samples, n_features_encoded)
+            Transformed features with original categorical columns replaced by
+            encoded representations. Original non-categorical columns preserved.
+        """
         X_encoded = X.copy()
         
         for feature in CATEGORICAL_FEATURES:
-            # Check if feature exists and encoder is fitted
-            if feature not in X_encoded.columns:
-                continue  # Skip if feature doesn't exist in transform data
+            if feature not in X_encoded.columns or feature not in self.encoders_:
+                continue
             
-            if feature not in self.encoders:
-                continue  # Skip if encoder wasn't fitted
+            encoder = self.encoders_[feature]
             
-            encoder = self.encoders[feature]
-            
-            # Process based on encoder type
             if isinstance(encoder, MultiLabelBinarizer):
-                # Convert comma-separated strings to lists of countries
-                data = X_encoded[feature].apply(lambda x: [c.strip() for c in str(x).split(',') if c.strip() and c.strip() != 'unknown']).tolist()
-                # Filter to only include top countries (others are ignored)
-                filtered_data = [[c for c in country_list if c in self.top_countries] for country_list in data]
-                transformed_data = encoder.transform(filtered_data)
-                
-                # Remove original column and add encoded columns
-                X_encoded = X_encoded.drop(columns=[feature])
-                cols = [f"{feature}_{country}" for country in encoder.classes]
-                df_mlb = pd.DataFrame(transformed_data, columns=cols, index=X_encoded.index)
-                X_encoded = pd.concat([X_encoded, df_mlb], axis=1)
-            
+                X_encoded = self._transform_multilabel(X_encoded, feature, encoder)
             elif isinstance(encoder, OneHotEncoder):
-                data = X_encoded[feature].values.reshape(-1, 1)
-                transformed_data = encoder.transform(data)
-                
-                # Remove original column and add encoded columns
-                X_encoded = X_encoded.drop(columns=[feature])
-                cols = encoder.get_feature_names_out([feature])
-                df_ohe = pd.DataFrame(transformed_data, columns=cols, index=X_encoded.index)
-                X_encoded = pd.concat([X_encoded, df_ohe], axis=1)
-            
+                X_encoded = self._transform_onehot(X_encoded, feature, encoder)
             else:  # TargetEncoder
-                data = X_encoded[feature].values.reshape(-1, 1)
-                transformed_data = encoder.transform(data)
-                
-                # TargetEncoder outputs a single column - ensure 1D array
-                transformed_data = np.asarray(transformed_data).squeeze()
-                if transformed_data.ndim > 1:
-                    transformed_data = transformed_data[:, 0]
-                
-                # Replace original column with transformed values
-                X_encoded[feature] = transformed_data
-
+                X_encoded = self._transform_target(X_encoded, feature, encoder)
+        
         return X_encoded
-
-    def save(self, path):
+    
+    def _transform_multilabel(
+        self, X: pd.DataFrame, feature: str, encoder: MultiLabelBinarizer
+    ) -> pd.DataFrame:
+        """Transform multi-label feature using MultiLabelBinarizer."""
+        country_lists = X[feature].apply(
+            lambda x: [c.strip() for c in str(x).split(',') 
+                      if c.strip() and c.strip() != 'unknown']
+        ).tolist()
+        
+        filtered_data = [
+            [c for c in country_list if c in self.top_countries_]
+            for country_list in country_lists
+        ]
+        
+        transformed = encoder.transform(filtered_data)
+        feature_names = [f"{feature}_{country}" for country in encoder.classes]
+        
+        X_encoded = X.drop(columns=[feature])
+        X_encoded = pd.concat([
+            X_encoded,
+            pd.DataFrame(transformed, columns=feature_names, index=X.index)
+        ], axis=1)
+        
+        return X_encoded
+    
+    def _transform_onehot(
+        self, X: pd.DataFrame, feature: str, encoder: OneHotEncoder
+    ) -> pd.DataFrame:
+        """Transform feature using OneHotEncoder."""
+        transformed = encoder.transform(X[feature].values.reshape(-1, 1))
+        feature_names = encoder.get_feature_names_out([feature])
+        
+        X_encoded = X.drop(columns=[feature])
+        X_encoded = pd.concat([
+            X_encoded,
+            pd.DataFrame(transformed, columns=feature_names, index=X.index)
+        ], axis=1)
+        
+        return X_encoded
+    
+    def _transform_target(
+        self, X: pd.DataFrame, feature: str, encoder: TargetEncoder
+    ) -> pd.DataFrame:
+        """Transform feature using TargetEncoder."""
+        transformed = encoder.transform(X[feature].values.reshape(-1, 1))
+        transformed = np.asarray(transformed).squeeze()
+        if transformed.ndim > 1:
+            transformed = transformed[:, 0]
+        
+        X[feature] = transformed
+        return X
+    
+    def fit_transform(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
+        """Fit encoders and transform in one step."""
+        return self.fit(X, y).transform(X)
+    
+    def save(self, path: str) -> None:
+        """Save fitted encoder to disk."""
         joblib.dump(self, path)
-
+    
     @classmethod
-    def load(cls, path):
+    def load(cls, path: str) -> 'FeatureEncoder':
+        """Load fitted encoder from disk."""
         return joblib.load(path)
