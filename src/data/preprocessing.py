@@ -286,9 +286,6 @@ class OutlierHandler:
             'proteins_100g',   # High values are common in meat, protein powders
             'salt_100g'        # High values are common in salty snacks, cured meats
         }
-        # fiber_100g: many products have 0-2g, but healthy products can have 5-20g
-        # Statistical outliers (e.g., > 4g) are actually valid and should be kept
-        self.exclude_from_statistical_removal = {'fiber_100g'}
 
     def detect_outliers(self, df: pd.DataFrame) -> Dict:
         """
