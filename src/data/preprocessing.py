@@ -379,10 +379,13 @@ class OutlierHandler:
                 print(f"   - {col:25s}: Removed {invalid_count:,} rows")
 
         # Step 3: Remove statistical outliers (very conservative - only extreme cases)
-        print("\n3. Checking for extreme statistical outliers...")
+        print("\n3. Removing extreme statistical outliers...")
 
         nutritional_cols = list(self.valid_ranges.keys())
         existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
+
+        # Create combined mask for all statistical outliers
+        combined_extreme_mask = pd.Series(False, index=df_clean.index)
 
         for col in existing_cols:
             # Use 3*IQR for very extreme outliers only
@@ -392,11 +395,14 @@ class OutlierHandler:
             lower_bound = Q1 - 3 * IQR
             upper_bound = Q3 + 3 * IQR
 
-            # Only remove if still outside valid range (double check)
+            # Identify extreme outliers
             extreme_mask = ((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound))
             extreme_count = extreme_mask.sum()
 
             if extreme_count > 0:
+                # Combine with overall mask (a row is outlier if outlier in any column)
+                combined_extreme_mask = combined_extreme_mask | extreme_mask
+                
                 if col not in removal_reasons:
                     removal_reasons[col] = {
                         'count': int(extreme_count),
@@ -405,6 +411,13 @@ class OutlierHandler:
 
                 print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
                       f"(range: {lower_bound:.2f} - {upper_bound:.2f})")
+
+        # Remove all statistical outliers at once
+        if combined_extreme_mask.any():
+            statistical_outliers_count = combined_extreme_mask.sum()
+            df_clean = df_clean[~combined_extreme_mask]
+            rows_removed += statistical_outliers_count
+            print(f"\n   Removed {statistical_outliers_count:,} rows with statistical outliers")
 
         # Step 4: Validate energy consistency (optional check)
         # Note: Energy consistency check removed (energy_100g column removed)
