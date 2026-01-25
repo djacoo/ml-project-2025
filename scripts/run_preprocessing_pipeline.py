@@ -93,15 +93,21 @@ def main():
     print("PIPELINE SUMMARY")
     print("="*70)
     print(f"Original features: {len(X.columns)}")
-    print(f"Processed features: {len([c for c in X_processed.columns if c not in [target_col, 'product_name', 'brands', 'code']])}")
+    
+    feature_cols = [c for c in X_processed.columns 
+                    if c not in [target_col, 'product_name', 'brands', 'code', 'split_group']]
+    print(f"Processed features: {len(feature_cols)}")
     print(f"Target column: {target_col} (preserved)")
     print(f"Preserved columns: product_name, brands, code")
     
-    # Show pipeline steps info
-    print("\nPipeline Steps Applied:")
-    for step_name in pipeline.get_pipeline_steps():
-        transformer = pipeline.get_transformer(step_name)
-        print(f"  - {step_name}: {type(transformer).__name__}")
+    # Show PCA info if present
+    pca_transformer = pipeline.get_transformer('pca')
+    if pca_transformer and hasattr(pca_transformer, 'n_components_selected_'):
+        cumulative_var = pca_transformer.get_cumulative_variance()[-1]
+        print(f"\nPCA Results:")
+        print(f"  Components: {pca_transformer.n_components_selected_}")
+        print(f"  Explained variance: {cumulative_var:.4f} ({cumulative_var*100:.2f}%)")
+        print(f"  Dimensionality reduction: {len(pca_transformer.feature_columns_)} -> {pca_transformer.n_components_selected_}")
     
     print("\n" + "="*70)
     print("PIPELINE COMPLETE")
