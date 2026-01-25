@@ -100,7 +100,14 @@ def main():
     print("\n" + "="*70)
     print("PIPELINE SUMMARY")
     print("="*70)
-    print(f"Original features: {len(X.columns)}")
+    print(f"Original dataset: {len(X):,} rows × {len(X.columns)} columns")
+    print(f"Final dataset: {len(X_processed):,} rows × {len(X_processed.columns)} columns")
+    
+    if len(X) != len(X_processed):
+        rows_removed = len(X) - len(X_processed)
+        print(f"Rows removed: {rows_removed:,} ({(rows_removed/len(X)*100):.1f}%)")
+    
+    print(f"\nOriginal features: {len(X.columns)}")
     
     feature_cols = [c for c in X_processed.columns 
                     if c not in [target_col, 'product_name', 'brands', 'code', 'split_group']]

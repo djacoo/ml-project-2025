@@ -178,6 +178,8 @@ def _extract_train_split(self, X: pd.DataFrame, y: Optional[pd.Series]):
     # ... resto del codice
 ```
 
+**Status**: ✅ **[RISOLTO]** - Warning esplicito aggiunto nel metodo `_extract_train_split()`.
+
 ---
 
 ### 8. **PCA: potenziale problema se colonne numeriche cambiano**
@@ -198,6 +200,8 @@ def transform(self, X: pd.DataFrame) -> pd.DataFrame:
     
     # ... resto del codice
 ```
+
+**Status**: ✅ **[RISOLTO]** - Validazione già presente nel metodo `transform()` (righe 136-142).
 
 ---
 
@@ -242,6 +246,8 @@ def transform(self, X: pd.DataFrame) -> pd.DataFrame:
 ### Media Priorità (miglioramenti importanti):
 4. ✅ **Aggiungere FeatureEngineer alla pipeline** **[RISOLTO]**
 5. ✅ **Validazione colonne richieste** **[RISOLTO]**
+7. ✅ **Warning per split_group mancante** **[RISOLTO]**
+8. ✅ **Validazione PCA colonne** **[RISOLTO]**
 
 ### Bassa Priorità (miglioramenti code quality):
 7. 💡 **Sistema di logging strutturato**

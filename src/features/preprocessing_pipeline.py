@@ -184,31 +184,55 @@ class PreprocessingPipeline:
         self : PreprocessingPipeline
             Returns self for method chaining.
         """
+        # Step 1: Extract train split if split_group exists
         X_fit, y_fit = self._extract_train_split(X, y)
-        X_features, y_work = self._prepare_features(X_fit, y_fit)
         
+        # Step 2: Prepare features and extract target
+        X_features, y_target = self._prepare_features_and_target(X_fit, y_fit)
+        
+        # Step 3: Fit pipeline steps
         X_current = X_features.copy()
-        y_current = y_work
+        
+        # Add target to X_current for transformers that need it (missing_values, outlier_removal)
+        if y_target is not None and self.target_col not in X_current.columns:
+            X_current[self.target_col] = y_target.values
         
         for step_name, transformer in self.pipeline.steps:
-            if self.target_col in X_current.columns and y_current is None:
-                y_current = pd.Series(X_current[self.target_col].values, index=X_current.index)
-            
-            if step_name == 'encoding' and y_current is None:
+            # Validate target availability for encoding step
+            if step_name == 'encoding' and y_target is None:
                 raise ValueError(
                     f"Target encoding requires y parameter, but y is None and "
                     f"{self.target_col} not in X"
                 )
             
-            transformer.fit(X_current, y_current)
+            # Ensure target is available for encoding step
+            # If target is in X_current, extract it to y_target for consistency
+            if step_name == 'encoding' and self.target_col in X_current.columns:
+                if y_target is None:
+                    y_target = pd.Series(X_current[self.target_col].values, index=X_current.index)
+                # Ensure indices are aligned
+                elif not X_current.index.equals(y_target.index):
+                    y_target = y_target.reindex(X_current.index)
+            
+            # Fit transformer
+            transformer.fit(X_current, y_target)
+            
+            # Transform data
             X_transformed = transformer.transform(X_current)
             
-            if len(X_transformed) < len(X_current):
-                remaining_indices = X_transformed.index
-                if y_current is not None:
-                    y_current = y_current.loc[remaining_indices]
-                if self.target_col in X_transformed.columns and y_current is not None:
-                    X_transformed[self.target_col] = y_current.values
+            # Remove target from transformed data (keep it separate)
+            if self.target_col in X_transformed.columns:
+                X_transformed = X_transformed.drop(columns=[self.target_col])
+            
+            # Align target if rows were removed
+            if len(X_transformed) < len(X_current) and y_target is not None:
+                y_target = y_target.loc[X_transformed.index]
+            
+            # Add target back to X_transformed for next transformer if needed
+            # Use aligned indices to ensure consistency
+            if y_target is not None and self.target_col not in X_transformed.columns:
+                y_aligned = y_target.reindex(X_transformed.index)
+                X_transformed[self.target_col] = y_aligned.values
             
             X_current = X_transformed
         
@@ -217,25 +241,61 @@ class PreprocessingPipeline:
     def _extract_train_split(
         self, X: pd.DataFrame, y: Optional[pd.Series]
     ) -> Tuple[pd.DataFrame, Optional[pd.Series]]:
-        """Extract train split if split_group exists, else return all data."""
+        """
+        Extract train split if split_group exists, else return all data.
+        
+        Raises a warning if split_group column is expected but not found,
+        as this may cause data leakage if test data is included.
+        """
         if self.split_group_col in X.columns:
             train_mask = X[self.split_group_col] == 'train'
             train_indices = X.index[train_mask]
             return X.loc[train_indices].copy(), y.loc[train_indices] if y is not None else None
+        
+        # Warning if split_group column not found
+        import warnings
+        warnings.warn(
+            f"'{self.split_group_col}' column not found in data. "
+            f"Fitting on all data. This may cause data leakage if test/validation data is included. "
+            f"For proper train/val/test split, ensure '{self.split_group_col}' column exists.",
+            UserWarning,
+            stacklevel=2
+        )
         return X.copy(), y
     
-    def _prepare_features(
+    def _prepare_features_and_target(
         self, X: pd.DataFrame, y: Optional[pd.Series]
     ) -> Tuple[pd.DataFrame, Optional[pd.Series]]:
-        """Separate features from metadata, add target if needed."""
+        """
+        Separate features from metadata and extract target.
+        
+        Strategy:
+        1. Remove metadata columns (split_group, preserve_cols)
+        2. Extract target from X if present, otherwise use y parameter
+        3. Remove target from X_features (keep it separate)
+        
+        Returns
+        -------
+        X_features : pd.DataFrame
+            Features without metadata and target columns.
+        y_target : pd.Series or None
+            Target variable extracted from X or provided as y parameter.
+        """
+        # Remove metadata columns
         metadata_cols = [self.split_group_col] + self.preserve_cols
         existing_metadata = [col for col in metadata_cols if col in X.columns]
         X_features = X.drop(columns=existing_metadata, errors='ignore')
         
-        if self.target_col not in X_features.columns and y is not None:
-            X_features[self.target_col] = y.values
-            return X_features, None
-        return X_features, y
+        # Extract target: prefer X[target_col] if present, otherwise use y parameter
+        if self.target_col in X_features.columns:
+            y_target = pd.Series(X_features[self.target_col].values, index=X_features.index)
+            X_features = X_features.drop(columns=[self.target_col])
+        elif y is not None:
+            y_target = y
+        else:
+            y_target = None
+        
+        return X_features, y_target
     
     def transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
         """
@@ -244,38 +304,48 @@ class PreprocessingPipeline:
         Parameters
         ----------
         X : pd.DataFrame of shape (n_samples, n_features)
-            Input features to transform.
+            Input features to transform. May contain target and metadata columns.
         y : pd.Series, optional
-            Target variable. Added to X if target_col not present.
+            Target variable. Used only if target_col not in X.
         
         Returns
         -------
         X_transformed : pd.DataFrame
             Transformed features with metadata columns preserved.
         """
+        # Step 1: Separate metadata and features
         metadata_cols = [self.split_group_col] + self.preserve_cols
         existing_metadata = [col for col in metadata_cols if col in X.columns]
         
+        # Step 2: Extract target if present in X, otherwise use y parameter
         target_in_X = self.target_col in X.columns
         if target_in_X:
             existing_metadata.append(self.target_col)
+            y_target = pd.Series(X[self.target_col].values, index=X.index)
+        else:
+            y_target = y
         
+        # Step 3: Remove metadata and target from features
         metadata = X[existing_metadata].copy() if existing_metadata else pd.DataFrame()
         X_features = X.drop(columns=existing_metadata, errors='ignore')
         
-        if self.target_col not in X_features.columns and y is not None:
-            X_features[self.target_col] = y.values
+        # Step 4: Add target to features if needed (for transformers that require it)
+        if self.target_col not in X_features.columns and y_target is not None:
+            X_features[self.target_col] = y_target.values
         
+        # Step 5: Transform features
         X_transformed = self.pipeline.transform(X_features)
         
-        if self.target_col in X_transformed.columns and not target_in_X:
+        # Step 6: Remove target from transformed features (keep it separate)
+        if self.target_col in X_transformed.columns:
             X_transformed = X_transformed.drop(columns=[self.target_col])
         
+        # Step 7: Restore metadata columns (aligned with transformed indices)
         if not metadata.empty:
             for col in metadata.columns:
                 if col != self.target_col or target_in_X:
-                    aligned_metadata = metadata.loc[X_transformed.index, col]
-                    X_transformed[col] = aligned_metadata.values
+                    aligned_metadata = metadata.reindex(X_transformed.index)
+                    X_transformed[col] = aligned_metadata[col].values
         
         return X_transformed
     
