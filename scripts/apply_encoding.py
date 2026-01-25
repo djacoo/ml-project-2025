@@ -19,7 +19,7 @@ def main():
     # Configure number of top countries to keep
     top_n_countries = 15
     project_root = Path(__file__).parent.parent
-    input_file = project_root / "data" / "processed" / "openfoodfacts_scaled.csv"
+    input_file = project_root / "data" / "processed" / "openfoodfacts_cleaned.csv"
     output_file = project_root / "data" / "processed" / "openfoodfacts_encoded.csv"
     models_dir = project_root / "models"
     
@@ -73,7 +73,7 @@ def main():
     
     print("\n" + "="*70)
     print(f"Encoded data saved to {output_file}")
-    print(f"Column 'split_group' added to track train/test rows")
+    print(f"Column 'split_group' preserved from input dataset")
     print("="*70)
 
 if __name__ == "__main__":

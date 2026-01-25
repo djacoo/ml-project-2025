@@ -47,19 +47,39 @@ class FeatureScaler(BaseEstimator, TransformerMixin):
 
     
     def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None):
+        """
+        Fit scalers for all numerical features in the dataframe.
+        Excludes non-feature columns like target, split_group, product_name, brands.
+        """
         self.scalers = {}
-        for feature in NUMERICAL_FEATURES:
+        
+        # Columns to exclude from scaling
+        exclude_cols = ['nutriscore_grade', 'split_group', 'product_name', 'brands']
+        
+        # Get all numerical columns, excluding non-feature columns
+        numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns
+        features_to_scale = [col for col in numerical_cols if col not in exclude_cols]
+        
+        print(f"Fitting scalers for {len(features_to_scale)} numerical features...")
+        
+        for feature in features_to_scale:
+            if feature not in X.columns:
+                continue
             if self.method == 'auto':
-                self.scalers[feature] = self.skewness_scaler(feature,X=X)
+                self.scalers[feature] = self.skewness_scaler(feature, X=X)
             else:
                 self.scalers[feature] = SCALERS[self.method]()
             self.scalers[feature].fit(X[feature].values.reshape(-1, 1))
         return self
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Transform all numerical features that were fitted.
+        """
         X_scaled = X.copy()
-        for feature in NUMERICAL_FEATURES:
-            X_scaled[feature] = self.scalers[feature].transform(X[feature].values.reshape(-1, 1))
+        for feature in self.scalers.keys():
+            if feature in X_scaled.columns:
+                X_scaled[feature] = self.scalers[feature].transform(X[feature].values.reshape(-1, 1))
         return X_scaled
 
     def skewness_scaler(self, feature: str,X: pd.DataFrame):
