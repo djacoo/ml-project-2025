@@ -419,15 +419,20 @@ class OutlierHandler:
 
             nutritional_cols = list(self.valid_ranges.keys())
             existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
+            
+            # IMPORTANT: Always exclude certain features from statistical removal, even when flag is True
+            # These features have highly skewed distributions where "statistical outliers" are actually valid
+            # (e.g., high fat in butter, high sugar in candy - these are valid products, not errors)
+            cols_to_process = [col for col in existing_cols if col not in self.exclude_from_statistical_removal]
+            cols_excluded = [col for col in existing_cols if col in self.exclude_from_statistical_removal]
+            
+            if cols_excluded:
+                print(f"   Excluded from statistical removal (always skipped): {', '.join(cols_excluded)}")
 
             # Create combined mask for all statistical outliers
             combined_extreme_mask = pd.Series(False, index=df_clean.index)
 
-            for col in existing_cols:
-                # Skip features with highly skewed distributions where statistical outliers are valid
-                if col in self.exclude_from_statistical_removal:
-                    print(f"   - {col:25s}: Skipped (highly skewed, statistical outliers are valid)")
-                    continue
+            for col in cols_to_process:
                 # Use 3*IQR for very extreme outliers only
                 Q1 = df_clean[col].quantile(0.25)
                 Q3 = df_clean[col].quantile(0.75)
