@@ -64,34 +64,37 @@ python scripts/download_data.py
 
 ### 5. Run Preprocessing Pipeline
 
-The preprocessing pipeline must be executed in the following order:
+**Recommended approach (using scikit-learn Pipeline):**
 
 ```bash
-# 1. Handle missing values (imputation)
+# 1. Handle missing values (imputation) - still needed as separate step
 python src/data/preprocessing.py
 
-# 2. Remove outliers and invalid values
-python scripts/remove_outliers.py
-
-# 3. Create train/validation/test splits
+# 2. Create train/validation/test splits
 python scripts/split_data.py
 
-# 4. Encode categorical variables
-python scripts/apply_encoding.py
-
-# 5. Apply feature scaling (scales all numerical features, including target-encoded ones)
-python scripts/apply_scaling.py
-
-# 6. Apply PCA dimensionality reduction (optional)
-python scripts/apply_pca.py
+# 3. Run complete preprocessing pipeline (includes: outlier removal, encoding, scaling, PCA)
+python scripts/run_preprocessing_pipeline.py
 ```
 
-**Note:** Each script loads the output from the previous step. The pipeline creates the following files:
-- `openfoodfacts_filtered.csv` → `openfoodfacts_preprocessed.csv` → `openfoodfacts_cleaned.csv` → `openfoodfacts_encoded.csv` → `openfoodfacts_scaled.csv` → `openfoodfacts_pca.csv`
+The pipeline script applies all preprocessing steps in sequence:
+1. Missing value handling (already done in step 1)
+2. Outlier removal
+3. Feature encoding (categorical → numerical)
+4. Feature scaling (standardization/normalization)
+5. PCA dimensionality reduction (optional)
 
-**Important:** Encoding is done before scaling so that all numerical features (including target-encoded columns like `pnns_groups_2`) are scaled together.
+**Output:** `data/processed/openfoodfacts_pipeline_processed.csv` with all preprocessing applied.
 
-The final processed data will be available in `data/processed/` with separate train/val/test splits in `data/processed/splits/`.
+**Alternative (legacy step-by-step scripts - for debugging only):**
+
+If you need to run preprocessing steps individually for debugging, legacy scripts are available in `scripts/legacy/`:
+- `scripts/legacy/remove_outliers.py` - Outlier removal
+- `scripts/legacy/apply_encoding.py` - Feature encoding
+- `scripts/legacy/apply_scaling.py` - Feature scaling
+- `scripts/legacy/apply_pca.py` - PCA reduction
+
+**Note:** These scripts are deprecated and kept only for debugging purposes. The pipeline approach is recommended as it ensures consistency and is easier to use in production. See `scripts/legacy/README.md` for more details.
 
 ## Development Workflow
 

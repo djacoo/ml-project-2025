@@ -55,7 +55,7 @@ def main():
         scaling_skew_threshold=1.0,
         pca_variance_threshold=0.95,
         target_col=target_col,
-        split_group_col=None,  # No split_group in initial data
+        split_group_col='split_group',  # Will be ignored if not present
         preserve_cols=['product_name', 'brands', 'code'],
         include_pca=True
     )
@@ -63,12 +63,19 @@ def main():
     print(f"Pipeline steps: {pipeline.get_pipeline_steps()}")
     
     # Fit and transform
-    print("\nFitting pipeline on full dataset...")
-    print("(Note: In production, fit only on train set)")
+    print("\nFitting and transforming pipeline...")
+    if 'split_group' in X.columns:
+        print("(Pipeline will automatically fit only on 'train' split to prevent data leakage)")
+    else:
+        print("(Warning: No 'split_group' column found. Fitting on all data.)")
+        print("(For proper train/val/test split, run 'scripts/split_data.py' first)")
     X_processed = pipeline.fit_transform(X, y)
     
-    # Add target back
-    X_processed[target_col] = y.values
+    # Add target back (aligned with processed data indices)
+    if target_col not in X_processed.columns:
+        # Align y with X_processed indices (some rows may have been removed)
+        y_aligned = y.loc[X_processed.index]
+        X_processed[target_col] = y_aligned.values
     
     # Save processed data
     print(f"\nSaving processed data to: {output_file}")

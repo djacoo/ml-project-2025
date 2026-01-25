@@ -44,11 +44,23 @@ class FeatureReducer(BaseEstimator, TransformerMixin):
         y : pd.Series, optional
             Target variable (not used, kept for API compatibility)
         """
+        # Select only numerical columns for PCA
+        numerical_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+        if len(numerical_cols) == 0:
+            raise ValueError("No numerical columns found for PCA")
+        
+        # Exclude target and metadata columns if present
+        exclude_cols = ['nutriscore_grade', 'split_group', 'product_name', 'brands', 'code']
+        numerical_cols = [col for col in numerical_cols if col not in exclude_cols]
+        
+        if len(numerical_cols) == 0:
+            raise ValueError("No numerical feature columns found for PCA (all excluded)")
+        
         # Store feature column names
-        self.feature_columns_ = X.columns.tolist()
+        self.feature_columns_ = numerical_cols
         
         # Convert to numpy array for PCA
-        X_array = X.values
+        X_array = X[numerical_cols].values
         
         # Determine number of components
         if self.n_components is not None:
@@ -99,6 +111,12 @@ class FeatureReducer(BaseEstimator, TransformerMixin):
         # Create DataFrame with principal component names
         pc_columns = [f'PC{i+1}' for i in range(self.n_components_selected_)]
         X_pca = pd.DataFrame(X_transformed, columns=pc_columns, index=X.index)
+        
+        # Preserve non-feature columns (target, split_group, etc.)
+        preserve_cols = ['nutriscore_grade', 'split_group', 'product_name', 'brands', 'code']
+        for col in preserve_cols:
+            if col in X.columns:
+                X_pca[col] = X[col].values
         
         return X_pca
     

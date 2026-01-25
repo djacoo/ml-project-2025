@@ -56,17 +56,23 @@ class MissingValueTransformer(BaseEstimator, TransformerMixin):
         self.dropped_features_ = self.handler.dropped_features.copy()
         return self
     
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
         """
         Transform data by handling missing values.
         
         Args:
             X: Input dataframe
+            y: Target series (optional, will be added to X if target_col not in X)
             
         Returns:
             Dataframe with missing values handled
         """
-        return self.handler.handle_missing_values(X, target_col=self.target_col)
+        # If target column is not in X but y is provided, add it temporarily
+        X_work = X.copy()
+        if self.target_col not in X_work.columns and y is not None:
+            X_work[self.target_col] = y.values
+        
+        return self.handler.handle_missing_values(X_work, target_col=self.target_col)
     
     def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
         """Fit and transform in one step."""

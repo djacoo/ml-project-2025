@@ -44,10 +44,10 @@ def create_preprocessing_pipeline(
     Args:
         missing_threshold: Threshold for dropping features with high missing percentage
         top_n_countries: Number of top countries to keep for encoding
-        scaling_method: Scaling method ('auto', 'standard', 'minmax', 'robust')
+        scaling_method: Scaling method ('auto', 'standard', 'minmax')
         scaling_skew_threshold: Skewness threshold for auto scaling method
         pca_variance_threshold: Variance threshold for PCA (0.0 to 1.0)
-        target_col: Name of target column
+        target_col: Name of target column to transform
         include_pca: Whether to include PCA in the pipeline
         
     Returns:
@@ -80,9 +80,13 @@ class PreprocessingPipeline:
     
     This class provides a convenient interface for preprocessing that handles:
     - Target column separation
-    - Split group preservation
+    - Split group preservation and usage (fits only on 'train' if split_group exists)
     - Non-feature column preservation
     - Pipeline fitting and transformation
+    
+    **Important:** If `split_group` column exists in the data, the pipeline will
+    automatically fit only on the 'train' split to prevent data leakage. The
+    `transform()` method can then be applied to the entire dataset (train/val/test).
     """
     
     def __init__(
@@ -130,6 +134,9 @@ class PreprocessingPipeline:
         """
         Fit the preprocessing pipeline on training data.
         
+        If split_group column exists, fits only on 'train' split to prevent data leakage.
+        Otherwise, fits on all provided data.
+        
         Args:
             X: Input dataframe with features
             y: Target series (required for target encoding)
@@ -137,14 +144,75 @@ class PreprocessingPipeline:
         Returns:
             self
         """
+        # Check if split_group exists and extract train subset for fitting
+        if self.split_group_col in X.columns:
+            train_mask = X[self.split_group_col] == 'train'
+            train_indices = X.index[train_mask]
+            print(f"\nUsing 'split_group' column: Fitting pipeline on TRAIN subset only")
+            print(f"  Train: {train_mask.sum():,} samples")
+            print(f"  Val:   {(X[self.split_group_col] == 'val').sum():,} samples")
+            print(f"  Test:  {(X[self.split_group_col] == 'test').sum():,} samples")
+            
+            # Use only train data for fitting
+            X_fit = X.loc[train_indices].copy()
+            if y is not None:
+                y_fit = y.loc[train_indices]
+            else:
+                y_fit = None
+        else:
+            print("\nNo 'split_group' column found. Fitting on all data.")
+            print("(Note: For reproducible splits, run 'scripts/split_data.py' first)")
+            X_fit = X.copy()
+            y_fit = y
+        
         # Separate features from metadata
-        metadata_cols = [self.target_col, self.split_group_col] + self.preserve_cols
-        existing_metadata = [col for col in metadata_cols if col in X.columns]
+        metadata_cols = [self.split_group_col] + self.preserve_cols
+        existing_metadata = [col for col in metadata_cols if col in X_fit.columns]
         
-        X_features = X.drop(columns=existing_metadata, errors='ignore')
+        # Keep target in X_features for MissingValueTransformer and OutlierRemovalTransformer
+        # They need it to drop rows with missing target
+        X_features = X_fit.drop(columns=existing_metadata, errors='ignore')
         
-        # Fit pipeline (encoding step needs y for target encoding)
-        self.pipeline.fit(X_features, y)
+        # If target is not in X but y is provided, add it
+        if self.target_col not in X_features.columns and y_fit is not None:
+            X_features[self.target_col] = y_fit.values
+            y_work = None  # y is now in X_features
+        else:
+            y_work = y_fit
+        
+        # Fit each step manually to handle row removal and y alignment
+        X_current = X_features.copy()
+        y_current = y_work
+        
+        for step_name, transformer in self.pipeline.steps:
+            # Extract target from X_current if it exists (for encoding step)
+            if self.target_col in X_current.columns and y_current is None:
+                y_current = pd.Series(X_current[self.target_col].values, index=X_current.index)
+            
+            # Fit the transformer
+            if step_name in ['encoding']:
+                # Encoding needs y for target encoding
+                if y_current is None:
+                    raise ValueError(f"Target encoding requires y parameter, but y is None and {self.target_col} not in X")
+                transformer.fit(X_current, y_current)
+            else:
+                transformer.fit(X_current, y_current)
+            
+            # Transform to get updated X (some transformers remove rows)
+            X_transformed = transformer.transform(X_current)
+            
+            # If rows were removed, align y_current
+            if len(X_transformed) < len(X_current):
+                # Use indices from transformed dataframe to align y
+                remaining_indices = X_transformed.index
+                if y_current is not None:
+                    y_current = y_current.loc[remaining_indices]
+                # Also update target in X if it exists
+                if self.target_col in X_transformed.columns:
+                    if y_current is not None:
+                        X_transformed[self.target_col] = y_current.values
+            
+            X_current = X_transformed
         
         return self
     
@@ -159,26 +227,44 @@ class PreprocessingPipeline:
         Returns:
             Transformed dataframe with preserved columns added back
         """
-        # Separate features from metadata
-        metadata_cols = [self.target_col, self.split_group_col] + self.preserve_cols
+        # Separate features from metadata (but keep target for transformers that need it)
+        metadata_cols = [self.split_group_col] + self.preserve_cols
         existing_metadata = [col for col in metadata_cols if col in X.columns]
+        
+        # Preserve target if it exists in X
+        target_in_X = self.target_col in X.columns
+        if target_in_X:
+            existing_metadata.append(self.target_col)
         
         metadata = X[existing_metadata].copy() if existing_metadata else pd.DataFrame()
         X_features = X.drop(columns=existing_metadata, errors='ignore')
         
+        # If target is not in X_features but y is provided, add it temporarily
+        # (needed for MissingValueTransformer and OutlierRemovalTransformer)
+        if self.target_col not in X_features.columns and y is not None:
+            X_features[self.target_col] = y.values
+        
         # Transform features
         X_transformed = self.pipeline.transform(X_features)
         
-        # Add back metadata columns
+        # Remove target from transformed data if it was added temporarily
+        if self.target_col in X_transformed.columns and not target_in_X:
+            X_transformed = X_transformed.drop(columns=[self.target_col])
+        
+        # Add back metadata columns (aligned with X_transformed indices)
         if not metadata.empty:
             for col in metadata.columns:
-                X_transformed[col] = metadata[col].values
+                if col != self.target_col or target_in_X:  # Only add target if it was in original X
+                    # Align metadata with X_transformed indices (some rows may have been removed)
+                    aligned_metadata = metadata.loc[X_transformed.index, col]
+                    X_transformed[col] = aligned_metadata.values
         
         return X_transformed
     
     def fit_transform(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> pd.DataFrame:
         """Fit and transform in one step."""
-        return self.fit(X, y).transform(X, y)
+        self.fit(X, y)
+        return self.transform(X, y)
     
     def get_pipeline_steps(self) -> List[str]:
         """Get list of pipeline step names."""
@@ -195,6 +281,23 @@ class PreprocessingPipeline:
     
     @classmethod
     def load(cls, path: str):
-        """Load a saved pipeline from disk."""
+        """
+        Load a saved pipeline from disk.
+        
+        Note: When loading, ensure that the 'src' directory is in Python path:
+            import sys
+            from pathlib import Path
+            sys.path.insert(0, str(Path(__file__).parent.parent / 'src'))
+            pipeline = PreprocessingPipeline.load('models/preprocessing_pipeline.joblib')
+        """
         import joblib
+        import sys
+        from pathlib import Path
+        
+        # Ensure src is in path for module imports
+        current_file = Path(__file__).resolve()
+        src_dir = current_file.parent.parent
+        if str(src_dir) not in sys.path:
+            sys.path.insert(0, str(src_dir))
+        
         return joblib.load(path)
