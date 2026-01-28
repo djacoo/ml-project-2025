@@ -1,29 +1,17 @@
 """
-Feature scaling module for Nutri-Score prediction
-This implementation follows the scikit-learn Transformer API, allowing 
-integration into pipelines and cross-validation
-Supports StandardScaler, MinMaxScaler, and RobustScaler.
+Feature scaling for Nutri-Score prediction.
+
+Implements automatic scaler selection based on skewness and manual method selection
+following scikit-learn Transformer API.
 """
 import joblib
 import pandas as pd
-from pathlib import Path
-from typing import List, Optional
+import numpy as np
+from typing import Optional, Dict
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 from scipy.stats import skew
 
-# numerical features for Nutri-Score
-NUMERICAL_FEATURES = [
-    'energy-kcal_100g',
-    'fat_100g',
-    'saturated-fat_100g',
-    'carbohydrates_100g',
-    'sugars_100g',
-    'fiber_100g',
-    'proteins_100g',
-    'salt_100g',
-    'additives_n'
-]
 
 SCALERS = {
     'standard': StandardScaler,
@@ -31,68 +19,127 @@ SCALERS = {
     'robust': RobustScaler
 }
 
-# Inheriting from BaseEstimator and TransformerMixin for:
-# - Automatic fit_transform implementation
-# - Compatibility with sklearn Pipeline objects
-# - Access to get_params/set_params for hyperparameter optimization (e.g., GridSearchCV)
+METADATA_COLS = ['nutriscore_grade', 'split_group', 'product_name', 'brands', 'code']
+
+
 class FeatureScaler(BaseEstimator, TransformerMixin):
     """
-    Wrapper for Nutri-Score feature scaling
-    """
-
-    def __init__(self, method: str = 'auto',skew_threshold: float = 0.5):
-        self.method = method
-        self.scalers= {}
-        self.skew_threshold = skew_threshold
-
+    Scales numerical features using configurable scaling strategies.
     
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None):
+    Parameters
+    ----------
+    method : {'auto', 'standard', 'minmax', 'robust'}, default='auto'
+        Scaling method. If 'auto', selects scaler based on feature skewness.
+    skew_threshold : float, default=1.0
+        Skewness threshold for automatic method selection. Features with
+        |skewness| > threshold use MinMaxScaler, else StandardScaler.
+    
+    Attributes
+    ----------
+    scalers_ : dict[str, sklearn.preprocessing.Transformer]
+        Fitted scalers for each numerical feature.
+    
+    Notes
+    -----
+    Automatically identifies and scales all numerical columns, excluding
+    metadata columns (target, split_group, product_name, brands, code).
+    """
+    
+    def __init__(self, method: str = 'auto', skew_threshold: float = 1.0):
+        self.method = method
+        self.skew_threshold = skew_threshold
+        self.scalers_: Dict[str, BaseEstimator] = {}
+    
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series] = None) -> 'FeatureScaler':
         """
-        Fit scalers for all numerical features in the dataframe.
-        Excludes non-feature columns like target, split_group, product_name, brands.
+        Fit scalers for all numerical features.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features containing numerical columns.
+        y : pd.Series, optional
+            Ignored. Present for API compatibility.
+        
+        Returns
+        -------
+        self : FeatureScaler
+            Returns self for method chaining.
         """
-        self.scalers = {}
+        self.scalers_ = {}
         
-        # Columns to exclude from scaling
-        exclude_cols = ['nutriscore_grade', 'split_group', 'product_name', 'brands']
+        numerical_cols = X.select_dtypes(include=[np.number]).columns
+        features_to_scale = [col for col in numerical_cols if col not in METADATA_COLS]
         
-        # Get all numerical columns, excluding non-feature columns
-        numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns
-        features_to_scale = [col for col in numerical_cols if col not in exclude_cols]
-        
-        print(f"Fitting scalers for {len(features_to_scale)} numerical features...")
+        if len(features_to_scale) == 0:
+            raise ValueError(
+                "No numerical features found to scale. "
+                "Ensure input contains numerical columns (excluding metadata)."
+            )
         
         for feature in features_to_scale:
-            if feature not in X.columns:
-                continue
             if self.method == 'auto':
-                self.scalers[feature] = self.skewness_scaler(feature, X=X)
+                scaler = self._select_scaler_by_skewness(X[feature])
             else:
-                self.scalers[feature] = SCALERS[self.method]()
-            self.scalers[feature].fit(X[feature].values.reshape(-1, 1))
+                scaler = SCALERS[self.method]()
+            
+            scaler.fit(X[feature].values.reshape(-1, 1))
+            self.scalers_[feature] = scaler
+        
         return self
-
+    
+    def _select_scaler_by_skewness(self, X_feature: pd.Series) -> BaseEstimator:
+        """
+        Select scaler based on feature skewness.
+        
+        Parameters
+        ----------
+        X_feature : pd.Series of shape (n_samples,)
+            Feature values to analyze.
+        
+        Returns
+        -------
+        scaler : sklearn.preprocessing.Transformer
+            MinMaxScaler if |skewness| > threshold, else StandardScaler.
+        """
+        feature_skewness = abs(skew(X_feature.dropna()))
+        return MinMaxScaler() if feature_skewness > self.skew_threshold else StandardScaler()
+    
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """
-        Transform all numerical features that were fitted.
+        Transform numerical features using fitted scalers.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame of shape (n_samples, n_features)
+            Input features to transform.
+        
+        Returns
+        -------
+        X_scaled : pd.DataFrame of shape (n_samples, n_features)
+            Scaled features. Non-numerical and metadata columns preserved.
         """
         X_scaled = X.copy()
-        for feature in self.scalers.keys():
-            if feature in X_scaled.columns:
-                X_scaled[feature] = self.scalers[feature].transform(X[feature].values.reshape(-1, 1))
-        return X_scaled
-
-    def skewness_scaler(self, feature: str,X: pd.DataFrame):
-        skewness = abs(skew(X[feature]))
-        if skewness > self.skew_threshold:
-            return MinMaxScaler()
-        else:
-            return StandardScaler()
-
-    def save(self, path: str) -> None:
-        joblib.dump(self, path)
         
-    @classmethod
-    def load(cls, path: str):
-        return joblib.load(path)
+        for feature, scaler in self.scalers_.items():
+            if feature in X_scaled.columns:
+                X_scaled[feature] = scaler.transform(
+                    X_scaled[feature].values.reshape(-1, 1)
+                ).flatten()
+        
+        return X_scaled
     
+    def fit_transform(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None
+    ) -> pd.DataFrame:
+        """Fit scalers and transform in one step."""
+        return self.fit(X, y).transform(X)
+    
+    def save(self, path: str) -> None:
+        """Save fitted scaler to disk."""
+        joblib.dump(self, path)
+    
+    @classmethod
+    def load(cls, path: str) -> 'FeatureScaler':
+        """Load fitted scaler from disk."""
+        return joblib.load(path)

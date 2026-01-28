@@ -47,7 +47,7 @@ def main():
     # Load cleaned data
     print(f"\nLoading cleaned data from: {input_file}")
     df = pd.read_csv(input_file)
-    print(f"✓ Loaded {len(df):,} rows × {len(df.columns)} columns")
+    print(f"Loaded {len(df):,} rows x {len(df.columns)} columns")
     
     # Check if target column exists
     if target_col not in df.columns:
@@ -71,7 +71,7 @@ def main():
         stratify=True
     )
     
-    print(f"✓ Split completed:")
+    print(f"Split completed:")
     print(f"  Train: {len(X_train):,} samples ({len(X_train)/len(df)*100:.1f}%)")
     print(f"  Val:   {len(X_val):,} samples ({len(X_val)/len(df)*100:.1f}%)")
     print(f"  Test:  {len(X_test):,} samples ({len(X_test)/len(df)*100:.1f}%)")
@@ -105,7 +105,7 @@ def main():
     print(f"Max deviation across all classes: {stats['max_deviation']*100:.2f}%")
     
     if stats['is_balanced']:
-        print("✓ Stratification is balanced (max deviation < 5%)")
+        print("Stratification is balanced (max deviation < 5%)")
     else:
         print("⚠ Warning: Stratification shows some imbalance (max deviation >= 5%)")
     
@@ -122,7 +122,7 @@ def main():
     print(f"\nSaving dataset with 'split_group' column to: {output_file}")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     df_with_split.to_csv(output_file, index=False)
-    print("✓ Dataset saved")
+    print("Dataset saved")
     
     # Save separate split files
     print(f"\nSaving separate split files to: {splits_dir}")
@@ -132,7 +132,7 @@ def main():
         X_test, y_test,
         output_dir=splits_dir
     )
-    print("✓ Split files saved:")
+    print("Split files saved:")
     for name, path in saved_files.items():
         print(f"  - {name}: {path.name}")
     
@@ -150,7 +150,7 @@ def main():
         'test_samples': len(X_test)
     }
     save_split_metadata(stats, config, metadata_file)
-    print("✓ Metadata saved")
+    print("Metadata saved")
     
     # Final summary
     print("\n" + "="*70)

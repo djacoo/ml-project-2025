@@ -1,10 +1,10 @@
 """
 Data preprocessing module for the Nutri-Score prediction dataset.
 
-This module implements various preprocessing strategies:
-- Missing value handling (imputation, dropping)
-- Outlier detection and removal (domain rules, statistical methods)
-- Data validation and cleaning
+This module implements missing value handling (imputation, dropping).
+
+Note: Outlier removal logic has been moved to src/features/outlier_removal.py
+(OutlierRemovalTransformer) to keep it within the pipeline.
 """
 
 import pandas as pd
@@ -89,93 +89,74 @@ class MissingValueHandler:
             Processed dataframe with missing values handled
         """
         df_processed = df.copy()
-        initial_rows = len(df_processed)
-        initial_cols = len(df_processed.columns)
+        initial_rows, initial_cols = len(df_processed), len(df_processed.columns)
 
-        print("\n" + "="*70)
-        print("MISSING VALUE HANDLING")
-        print("="*70)
-        print(f"\nInitial dataset: {initial_rows:,} rows × {initial_cols} columns")
+        print(f"\nMissing Value Handling: {initial_rows:,} rows × {initial_cols} columns")
 
-        # Step 1: Analyze missing values
-        print("\n1. Analyzing missing value patterns...")
+        # Analyze missing values
         self.missing_report = self.analyze_missing_values(df_processed)
+        
+        # Show top missing features
+        top_missing = [(col, info) for col, info in list(self.missing_report.items())[:5] 
+                       if info['missing_percentage'] > 0]
+        if top_missing:
+            print("Top missing features:")
+            for col, info in top_missing:
+                print(f"  {col}: {info['missing_percentage']:.1f}% ({info['missing_count']:,})")
 
-        # Print summary
-        print("\nMissing Value Summary (Top 10):")
-        print("-" * 70)
-        for i, (col, info) in enumerate(list(self.missing_report.items())[:10], 1):
-            if info['missing_percentage'] > 0:
-                print(f"{i:2d}. {col:40s} {info['missing_percentage']:6.2f}% "
-                      f"({info['missing_count']:,} missing)")
-
-        # Step 2: Drop features with >95% missing
-        print(f"\n2. Dropping features with >{self.threshold_drop_feature*100:.0f}% missing data...")
+        # Drop features with high missing percentage
+        threshold_pct = self.threshold_drop_feature * 100
         high_missing_cols = [col for col, info in self.missing_report.items()
-                            if info['missing_percentage'] > self.threshold_drop_feature * 100
-                            and col != target_col]
-
+                            if info['missing_percentage'] > threshold_pct and col != target_col]
+        
         if high_missing_cols:
-            print(f"   Dropping {len(high_missing_cols)} features:")
-            for col in high_missing_cols:
-                pct = self.missing_report[col]['missing_percentage']
-                print(f"   - {col:40s} ({pct:.2f}% missing)")
-                self.dropped_features.append(col)
-
             df_processed = df_processed.drop(columns=high_missing_cols)
-        else:
-            print("   No features to drop.")
+            self.dropped_features.extend(high_missing_cols)
+            print(f"Dropped {len(high_missing_cols)} features with >{threshold_pct:.0f}% missing")
 
-        # Step 3: Drop rows with missing target
-        print(f"\n3. Handling target variable '{target_col}'...")
+        # Drop rows with missing target
         target_missing = df_processed[target_col].isnull().sum()
         if target_missing > 0:
-            print(f"   Dropping {target_missing:,} rows with missing target")
             df_processed = df_processed[df_processed[target_col].notna()]
-        else:
-            print("   ✓ No missing values in target variable")
+            print(f"Dropped {target_missing:,} rows with missing target")
 
-        # Step 4: Handle numerical features
-        print("\n4. Imputing numerical features...")
+        # Impute numerical features
         numerical_cols = df_processed.select_dtypes(include=[np.number]).columns.tolist()
-
+        imputed_numerical = []
+        
         for col in numerical_cols:
             missing_count = df_processed[col].isnull().sum()
             if missing_count > 0:
-                # Special handling for additives_n: impute with 0
                 if col == 'additives_n':
                     df_processed[col] = df_processed[col].fillna(0)
-                    self.imputation_stats[col] = {
-                        'method': 'constant',
-                        'value': 0,
-                        'missing_count': int(missing_count),
-                        'rationale': 'Assume no additives if not specified'
-                    }
-                    print(f"   - {col:40s} imputed with 0 ({missing_count:,} values)")
+                    method, value = 'constant', 0
                 else:
-                    # Use median for other numerical features
-                    median_val = df_processed[col].median()
-                    df_processed[col] = df_processed[col].fillna(median_val)
-                    self.imputation_stats[col] = {
-                        'method': 'median',
-                        'value': float(median_val),
-                        'missing_count': int(missing_count),
-                        'rationale': 'Median imputation for nutritional values'
-                    }
-                    print(f"   - {col:40s} imputed with median={median_val:.2f} "
-                          f"({missing_count:,} values)")
+                    value = df_processed[col].median()
+                    df_processed[col] = df_processed[col].fillna(value)
+                    method = 'median'
+                
+                self.imputation_stats[col] = {
+                    'method': method,
+                    'value': float(value) if method == 'median' else value,
+                    'missing_count': int(missing_count),
+                    'rationale': 'Assume no additives' if col == 'additives_n' else 'Median imputation'
+                }
+                imputed_numerical.append((col, method, value, missing_count))
+        
+        if imputed_numerical:
+            print(f"Imputed {len(imputed_numerical)} numerical features:")
+            for col, method, value, count in imputed_numerical[:5]:  # Show first 5
+                val_str = f"{value:.2f}" if isinstance(value, (int, float)) else str(value)
+                print(f"  {col}: {method} ({val_str}) - {count:,} values")
 
-        # Step 5: Handle categorical features
-        print("\n5. Imputing categorical features...")
-        categorical_cols = df_processed.select_dtypes(include=['object']).columns.tolist()
-
-        # Exclude target column
-        categorical_cols = [col for col in categorical_cols if col != target_col]
-
+        # Impute categorical features
+        categorical_cols = [col for col in df_processed.select_dtypes(include=['object']).columns 
+                           if col != target_col]
+        imputed_categorical = []
+        
         for col in categorical_cols:
             missing_count = df_processed[col].isnull().sum()
             if missing_count > 0:
-                # Use 'unknown' for missing categorical values
                 df_processed[col] = df_processed[col].fillna('unknown')
                 self.imputation_stats[col] = {
                     'method': 'constant',
@@ -183,41 +164,30 @@ class MissingValueHandler:
                     'missing_count': int(missing_count),
                     'rationale': 'Placeholder for missing categorical data'
                 }
-                print(f"   - {col:40s} imputed with 'unknown' ({missing_count:,} values)")
+                imputed_categorical.append((col, missing_count))
+        
+        if imputed_categorical:
+            print(f"Imputed {len(imputed_categorical)} categorical features with 'unknown'")
 
-        # Step 6: Final verification
-        print("\n6. Final verification...")
-        final_rows = len(df_processed)
-        final_cols = len(df_processed.columns)
+        # Final summary
+        final_rows, final_cols = len(df_processed), len(df_processed.columns)
         remaining_missing = df_processed.isnull().sum().sum()
-
-        print(f"   Final dataset: {final_rows:,} rows × {final_cols} columns")
-        print(f"   Rows dropped: {initial_rows - final_rows:,} "
-              f"({(initial_rows - final_rows)/initial_rows*100:.2f}%)")
-        print(f"   Columns dropped: {initial_cols - final_cols}")
-        print(f"   Remaining missing values: {remaining_missing:,}")
-
+        
+        print(f"\nResult: {final_rows:,} rows × {final_cols} columns")
+        if initial_rows != final_rows:
+            print(f"  Rows removed: {initial_rows - final_rows:,} ({(initial_rows - final_rows)/initial_rows*100:.1f}%)")
+        if initial_cols != final_cols:
+            print(f"  Columns removed: {initial_cols - final_cols}")
+        
         if remaining_missing > 0:
-            print("\n   ⚠️  WARNING: Missing values still present!")
-            print("\n   Columns with remaining missing values:")
-            for col in df_processed.columns:
-                missing = df_processed[col].isnull().sum()
-                if missing > 0:
-                    print(f"      - {col}: {missing:,} missing")
+            print(f"  ⚠️  Warning: {remaining_missing:,} missing values remaining")
         else:
-            print("\n   ✓ All missing values handled successfully!")
-
-        print("\n" + "="*70)
+            print("  ✓ All missing values handled")
 
         return df_processed
 
-    def save_imputation_report(self, output_path: Path):
-        """
-        Save detailed report of imputation strategies and statistics.
-
-        Args:
-            output_path: Path to save the JSON report
-        """
+    def save_imputation_report(self, output_path: Path) -> None:
+        """Save detailed report of imputation strategies and statistics."""
         report = {
             'strategy': {
                 'threshold_drop_feature': self.threshold_drop_feature,
@@ -232,237 +202,15 @@ class MissingValueHandler:
         with open(output_path, 'w') as f:
             json.dump(report, f, indent=2)
 
-        print(f"\n✓ Imputation report saved to: {output_path}")
-
-
-class OutlierHandler:
-    """
-    Handles outliers and invalid values in nutritional data.
-
-    Strategy:
-    - Remove negative values (nutritional values cannot be negative)
-    - Apply domain-specific valid ranges (e.g., fat <= 100g per 100g)
-    - Remove statistical outliers using IQR method
-    - Validate energy consistency with macronutrients
-    """
-
-    def __init__(self):
-        """Initialize the outlier handler."""
-        self.removal_stats = {}
-        self.outlier_report = {}
-
-        # Define valid ranges for nutritional values (per 100g)
-        # Note: energy_100g removed (redundant with energy-kcal_100g)
-        self.valid_ranges = {
-            'fat_100g': (0, 100),              # 0-100g per 100g
-            'saturated-fat_100g': (0, 100),    # 0-100g per 100g
-            'carbohydrates_100g': (0, 100),    # 0-100g per 100g
-            'sugars_100g': (0, 100),           # 0-100g per 100g
-            'fiber_100g': (0, 100),            # 0-100g per 100g (extreme but possible)
-            'proteins_100g': (0, 100),         # 0-100g per 100g
-            'salt_100g': (0, 50),              # 0-50g per 100g (very salty max)
-        }
-
-    def detect_outliers(self, df: pd.DataFrame) -> Dict:
-        """
-        Detect various types of outliers in the dataset.
-
-        Args:
-            df: Input dataframe
-
-        Returns:
-            Dictionary with outlier statistics
-        """
-        outlier_info = {}
-
-        for col in self.valid_ranges.keys():
-            if col not in df.columns:
-                continue
-
-            col_info = {}
-
-            # Check negative values
-            negative_mask = df[col] < 0
-            col_info['negative_count'] = int(negative_mask.sum())
-
-            # Check values outside valid range
-            min_val, max_val = self.valid_ranges[col]
-            below_min = (df[col] < min_val).sum()
-            above_max = (df[col] > max_val).sum()
-            col_info['below_min'] = int(below_min)
-            col_info['above_max'] = int(above_max)
-            col_info['valid_range'] = self.valid_ranges[col]
-
-            # Statistical outliers using IQR method
-            Q1 = df[col].quantile(0.25)
-            Q3 = df[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 3 * IQR  # Using 3*IQR for extreme outliers only
-            upper_bound = Q3 + 3 * IQR
-
-            statistical_outliers = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
-            col_info['statistical_outliers'] = int(statistical_outliers)
-            col_info['IQR_bounds'] = (float(lower_bound), float(upper_bound))
-
-            # Current stats
-            col_info['min'] = float(df[col].min())
-            col_info['max'] = float(df[col].max())
-            col_info['median'] = float(df[col].median())
-
-            outlier_info[col] = col_info
-
-        return outlier_info
-
-    def remove_outliers(self, df: pd.DataFrame,
-                       target_col: str = 'nutriscore_grade') -> pd.DataFrame:
-        """
-        Remove outliers and invalid values according to defined strategy.
-
-        Args:
-            df: Input dataframe
-            target_col: Name of the target column (to preserve)
-
-        Returns:
-            Cleaned dataframe with outliers removed
-        """
-        df_clean = df.copy()
-        initial_rows = len(df_clean)
-
-        print("\n" + "="*70)
-        print("OUTLIER REMOVAL")
-        print("="*70)
-        print(f"\nInitial dataset: {initial_rows:,} rows")
-
-        # Step 1: Analyze outliers before removal
-        print("\n1. Analyzing outliers...")
-        self.outlier_report['before_cleaning'] = self.detect_outliers(df_clean)
-
-        # Print summary of issues found
-        print("\nOutlier Summary (Before Cleaning):")
-        print("-" * 70)
-        total_issues = 0
-        for col, info in self.outlier_report['before_cleaning'].items():
-            issues = info['negative_count'] + info['above_max']
-            if issues > 0:
-                total_issues += issues
-                print(f"{col:25s}: {info['negative_count']:6,} negative, "
-                      f"{info['above_max']:6,} above max ({info['valid_range'][1]})")
-
-        print(f"\nTotal problematic values: {total_issues:,}")
-
-        # Step 2: Remove rows with invalid values
-        print("\n2. Removing invalid values...")
-        rows_removed = 0
-        removal_reasons = {}
-
-        for col in self.valid_ranges.keys():
-            if col not in df_clean.columns:
-                continue
-
-            min_val, max_val = self.valid_ranges[col]
-
-            # Create mask for invalid values (negative or outside valid range)
-            invalid_mask = (df_clean[col] < min_val) | (df_clean[col] > max_val)
-            invalid_count = invalid_mask.sum()
-
-            if invalid_count > 0:
-                # Store removal reason
-                removal_reasons[col] = {
-                    'count': int(invalid_count),
-                    'reason': f'Outside valid range ({min_val}, {max_val})'
-                }
-
-                # Remove invalid rows
-                df_clean = df_clean[~invalid_mask]
-                rows_removed += invalid_count
-
-                print(f"   - {col:25s}: Removed {invalid_count:,} rows")
-
-        # Step 3: Remove statistical outliers (very conservative - only extreme cases)
-        print("\n3. Checking for extreme statistical outliers...")
-
-        nutritional_cols = list(self.valid_ranges.keys())
-        existing_cols = [col for col in nutritional_cols if col in df_clean.columns]
-
-        for col in existing_cols:
-            # Use 3*IQR for very extreme outliers only
-            Q1 = df_clean[col].quantile(0.25)
-            Q3 = df_clean[col].quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 3 * IQR
-            upper_bound = Q3 + 3 * IQR
-
-            # Only remove if still outside valid range (double check)
-            extreme_mask = ((df_clean[col] < lower_bound) | (df_clean[col] > upper_bound))
-            extreme_count = extreme_mask.sum()
-
-            if extreme_count > 0:
-                if col not in removal_reasons:
-                    removal_reasons[col] = {
-                        'count': int(extreme_count),
-                        'reason': f'Extreme statistical outlier (3*IQR)'
-                    }
-
-                print(f"   - {col:25s}: {extreme_count:,} extreme outliers detected "
-                      f"(range: {lower_bound:.2f} - {upper_bound:.2f})")
-
-        # Step 4: Validate energy consistency (optional check)
-        # Note: Energy consistency check removed (energy_100g column removed)
-
-        # Step 5: Final verification
-        print("\n5. Final verification...")
-        final_rows = len(df_clean)
-        total_removed = initial_rows - final_rows
-        removal_pct = (total_removed / initial_rows) * 100
-
-        print(f"   Initial rows: {initial_rows:,}")
-        print(f"   Final rows: {final_rows:,}")
-        print(f"   Rows removed: {total_removed:,} ({removal_pct:.2f}%)")
-
-        # Analyze outliers after removal
-        self.outlier_report['after_cleaning'] = self.detect_outliers(df_clean)
-        self.outlier_report['removal_summary'] = removal_reasons
-        self.outlier_report['rows_removed'] = int(total_removed)
-        self.outlier_report['removal_percentage'] = float(removal_pct)
-
-        # Verify no invalid values remain
-        print("\n6. Validation check...")
-        issues_remaining = 0
-        for col, info in self.outlier_report['after_cleaning'].items():
-            issues = info['negative_count'] + info['above_max']
-            if issues > 0:
-                issues_remaining += issues
-                print(f"   ⚠️  {col}: {issues:,} issues remaining")
-
-        if issues_remaining == 0:
-            print("   ✓ All invalid values successfully removed!")
-        else:
-            print(f"   ⚠️  WARNING: {issues_remaining:,} issues remaining")
-
-        print("\n" + "="*70)
-
-        return df_clean
-
-    def save_outlier_report(self, output_path: Path):
-        """
-        Save detailed report of outlier removal.
-
-        Args:
-            output_path: Path to save the JSON report
-        """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(output_path, 'w') as f:
-            json.dump(self.outlier_report, f, indent=2)
-
-        print(f"\n✓ Outlier removal report saved to: {output_path}")
+        print(f"Saved imputation report: {output_path}")
 
 
 def preprocess_dataset(input_path: Path,
                       output_path: Path,
                       report_path: Path = None) -> Tuple[pd.DataFrame, MissingValueHandler]:
     """
-    Main preprocessing function to handle missing values and outliers.
-    This function also cleans the 'countries' column.
+    Main preprocessing function to handle missing values.
+    Also cleans the 'countries' column and removes unnecessary columns.
 
     Args:
         input_path: Path to input CSV file
@@ -472,59 +220,38 @@ def preprocess_dataset(input_path: Path,
     Returns:
         Tuple of (processed dataframe, missing value handler instance)
     """
-    print("\n" + "="*70)
-    print("DATA PREPROCESSING - MISSING VALUE HANDLING")
-    print("="*70)
-
-    # Load data
-    print(f"\nLoading data from: {input_path}")
+    print(f"\nLoading data: {input_path}")
     df = pd.read_csv(input_path)
-    print(f"✓ Loaded {len(df):,} rows × {len(df.columns)} columns")
+    print(f"Loaded: {len(df):,} rows × {len(df.columns)} columns")
 
-    # Initialize handler and process
+    # Handle missing values
     handler = MissingValueHandler(threshold_drop_feature=0.95)
     df_processed = handler.handle_missing_values(df)
 
-    # Clean countries column if it exists
+    # Clean countries column
     if 'countries' in df_processed.columns:
-        print("\n" + "="*70)
-        print("CLEANING COUNTRIES COLUMN")
-        print("="*70)
-        print(f"\nCleaning 'countries' column...")
+        print("\nCleaning countries column...")
         df_processed['countries'] = df_processed['countries'].apply(clean_countries_column)
-        print("✓ Countries column cleaned and overwritten")
+        print("Countries column cleaned")
     
     # Remove unnecessary columns
-    print("\n" + "="*70)
-    print("REMOVING UNNECESSARY COLUMNS")
-    print("="*70)
-    
     columns_to_remove = []
     
-    # Remove energy_100g (redundant with energy-kcal_100g)
     if 'energy_100g' in df_processed.columns:
         columns_to_remove.append('energy_100g')
-        print(f"  - Removing 'energy_100g' (redundant with 'energy-kcal_100g')")
     
-    # Remove main_category and categories if they have > 10k unique values
     for col in ['main_category', 'categories']:
-        if col in df_processed.columns:
-            n_unique = df_processed[col].nunique()
-            if n_unique > 10000:
-                columns_to_remove.append(col)
-                print(f"  - Removing '{col}' ({n_unique:,} unique values, > 10k threshold)")
+        if col in df_processed.columns and df_processed[col].nunique() > 10000:
+            columns_to_remove.append(col)
     
     if columns_to_remove:
         df_processed = df_processed.drop(columns=columns_to_remove)
-        print(f"\n✓ Removed {len(columns_to_remove)} column(s)")
-    else:
-        print("\n✓ No columns to remove")
+        print(f"Removed {len(columns_to_remove)} unnecessary column(s)")
     
     # Save processed data
-    print(f"\nSaving processed data to: {output_path}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_processed.to_csv(output_path, index=False)
-    print(f"✓ Processed data saved successfully")
+    print(f"\nSaved processed data: {output_path}")
 
     # Save report
     if report_path:
@@ -611,18 +338,10 @@ def clean_countries_column(entry) -> str:
     return ",".join(sorted(valid_countries))
 
 if __name__ == "__main__":
-    # Define paths
     project_root = Path(__file__).parent.parent.parent
     input_file = project_root / "data" / "processed" / "openfoodfacts_filtered.csv"
     output_file = project_root / "data" / "processed" / "openfoodfacts_preprocessed.csv"
     report_file = project_root / "data" / "processed" / "imputation_report.json"
 
-    # Run preprocessing
     df_processed, handler = preprocess_dataset(input_file, output_file, report_file)
-
-    print("\n" + "="*70)
-    print("PREPROCESSING COMPLETE")
-    print("="*70)
-    print(f"\nProcessed dataset shape: {df_processed.shape}")
-    print(f"Output file: {output_file}")
-    print(f"Report file: {report_file}")
+    print(f"\nPreprocessing complete: {df_processed.shape}")

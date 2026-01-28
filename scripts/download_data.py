@@ -96,7 +96,7 @@ def download_dataset(url, output_path):
                     size = f.write(chunk)
                     pbar.update(size)
 
-        print(f"✓ Dataset downloaded successfully to {output_path}")
+        print(f"Dataset downloaded successfully to {output_path}")
         return True
 
     except Exception as e:
@@ -177,16 +177,16 @@ def load_and_filter_data(input_path, output_path, sample_size=None, chunksize=10
             # Collect chunks for later processing
             all_filtered_chunks.append(df_filtered)
 
-        print(f"✓ Processed {total_rows:,} total products")
-        print(f"✓ Found {filtered_rows:,} products with Nutri-Score labels")
-        print(f"✓ Filtered to {valid_rows:,} products with valid Nutri-Score (a-e)")
+        print(f"Processed {total_rows:,} total products")
+        print(f"Found {filtered_rows:,} products with Nutri-Score labels")
+        print(f"Filtered to {valid_rows:,} products with valid Nutri-Score (a-e)")
 
         if missing_columns:
             print(f"\nNote: The following columns are not in the dataset:")
             for col in missing_columns:
                 print(f"  - {col}")
 
-        print(f"✓ Kept {len(existing_columns)} relevant columns")
+        print(f"Kept {len(existing_columns)} relevant columns")
 
         # Combine all filtered chunks
         print(f"\nCombining filtered chunks...")
@@ -195,7 +195,7 @@ def load_and_filter_data(input_path, output_path, sample_size=None, chunksize=10
         # Sample if requested
         if sample_size and len(df_filtered) > sample_size:
             df_filtered = df_filtered.sample(n=sample_size, random_state=42)
-            print(f"✓ Randomly sampled {sample_size:,} products")
+            print(f"Randomly sampled {sample_size:,} products")
             
             # Recalculate grade distribution for sampled data
             grade_counts = df_filtered['nutriscore_grade'].str.upper().value_counts().sort_index()
@@ -203,7 +203,7 @@ def load_and_filter_data(input_path, output_path, sample_size=None, chunksize=10
         # Save filtered data
         print(f"\nSaving filtered dataset to {output_path}...")
         df_filtered.to_csv(output_path, index=False)
-        print(f"✓ Filtered dataset saved successfully")
+        print(f"Filtered dataset saved successfully")
 
         # Display class distribution
         print("\nNutri-Score distribution:")
@@ -226,7 +226,7 @@ def load_and_filter_data(input_path, output_path, sample_size=None, chunksize=10
         metadata_path = PROCESSED_DATA_DIR / 'metadata.json'
         with open(metadata_path, 'w') as f:
             json.dump(metadata, f, indent=2)
-        print(f"✓ Metadata saved to {metadata_path}")
+        print(f"Metadata saved to {metadata_path}")
 
         return df_filtered
 
@@ -254,7 +254,7 @@ def main():
             print("\nFailed to download dataset. Exiting.")
             return
     else:
-        print(f"✓ Raw dataset already exists at {RAW_FILE}")
+        print(f"Raw dataset already exists at {RAW_FILE}")
 
     # Load and filter data
     df = load_and_filter_data(RAW_FILE, FILTERED_FILE, sample_size=100000)

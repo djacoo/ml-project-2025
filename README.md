@@ -64,34 +64,37 @@ python scripts/download_data.py
 
 ### 5. Run Preprocessing Pipeline
 
-The preprocessing pipeline must be executed in the following order:
+**Recommended approach (using scikit-learn Pipeline):**
 
 ```bash
-# 1. Handle missing values (imputation)
+# 1. Handle missing values (imputation) - still needed as separate step
 python src/data/preprocessing.py
 
-# 2. Remove outliers and invalid values
-python scripts/remove_outliers.py
-
-# 3. Create train/validation/test splits
+# 2. Create train/validation/test splits
 python scripts/split_data.py
 
-# 4. Encode categorical variables
-python scripts/apply_encoding.py
-
-# 5. Apply feature scaling (scales all numerical features, including target-encoded ones)
-python scripts/apply_scaling.py
-
-# 6. Apply PCA dimensionality reduction (optional)
-python scripts/apply_pca.py
+# 3. Run complete preprocessing pipeline (includes: outlier removal, encoding, scaling, PCA)
+python scripts/run_preprocessing_pipeline.py
 ```
 
-**Note:** Each script loads the output from the previous step. The pipeline creates the following files:
-- `openfoodfacts_filtered.csv` → `openfoodfacts_preprocessed.csv` → `openfoodfacts_cleaned.csv` → `openfoodfacts_encoded.csv` → `openfoodfacts_scaled.csv` → `openfoodfacts_pca.csv`
+The pipeline script applies all preprocessing steps in sequence:
+1. Missing value handling (already done in step 1)
+2. Outlier removal
+3. Feature encoding (categorical → numerical)
+4. Feature scaling (standardization/normalization)
+5. PCA dimensionality reduction (optional)
 
-**Important:** Encoding is done before scaling so that all numerical features (including target-encoded columns like `pnns_groups_2`) are scaled together.
+**Output:** `data/processed/openfoodfacts_pipeline_processed.csv` with all preprocessing applied.
 
-The final processed data will be available in `data/processed/` with separate train/val/test splits in `data/processed/splits/`.
+**Alternative (legacy step-by-step scripts - for debugging only):**
+
+If you need to run preprocessing steps individually for debugging, legacy scripts are available in `scripts/legacy/`:
+- `scripts/legacy/remove_outliers.py` - Outlier removal
+- `scripts/legacy/apply_encoding.py` - Feature encoding
+- `scripts/legacy/apply_scaling.py` - Feature scaling
+- `scripts/legacy/apply_pca.py` - PCA reduction
+
+**Note:** These scripts are deprecated and kept only for debugging purposes. The pipeline approach is recommended as it ensures consistency and is easier to use in production. See `scripts/legacy/README.md` for more details.
 
 ## Development Workflow
 
@@ -128,40 +131,40 @@ This project follows **Git Flow** methodology.
   - Missing value analysis
   - Class distribution analysis
   - Feature correlation analysis
-- [x] **Issue #2: Missing Value Handling** ✓
+- [x] **Issue #2: Missing Value Handling**
   - Implemented `MissingValueHandler` class in `src/data/preprocessing.py`
   - Comprehensive imputation strategy (median, constant, placeholder)
   - Validation notebook with before/after comparison
   - Zero missing values in final dataset (100,000 rows × 20 columns)
-- [x] **Issue #3: Remove Outliers and Invalid Values** ✓
+- [x] **Issue #3: Remove Outliers and Invalid Values**
   - Implemented `OutlierHandler` class with domain-specific rules
   - Removed 3,903 rows (3.9%) with invalid nutritional values
   - Domain validation (energy 0-3000 kcal, macros 0-100g, salt 0-50g)
   - Statistical outlier detection (IQR method)
   - Final dataset: 96,097 rows × 20 columns, all values validated
-- [x] **Issue #4: Normalize Numerical Features** ✓
+- [x] **Issue #4: Normalize Numerical Features**
   - Implemented `FeatureScaler` class in `src/features/scaling.py`
   - StandardScaler applied to numerical features
   - Fitted on train split, applied to entire dataset
   - Scaler saved to `models/scaler.joblib`
   - Validation notebook: `notebooks/scaling_validation.ipynb`
-- [x] **Issue #5: Encode Categorical Variables** ✓
+- [x] **Issue #5: Encode Categorical Variables**
   - Implemented `FeatureEncoder` class in `src/features/encoding.py`
   - One-hot encoding for top 15 countries (others grouped as "other")
   - Encoder saved to `models/encoder.joblib`
   - Validation notebook: `notebooks/encoding_validation.ipynb`
-- [x] **Issue #6: Create Derived Features** ✓
+- [x] **Issue #6: Create Derived Features**
   - Implemented `FeatureEngineer` class in `src/features/feature_engineering.py`
   - Created macro nutrient ratios (fat/protein, sugar/carb, saturated/total fat)
   - Added energy density and caloric contribution features
   - Created boolean flags for high nutrient levels (WHO recommendations)
   - Validation notebook: `notebooks/feature_engineering_validation.ipynb`
-- [x] **Issue #7: Apply PCA for Dimensionality Reduction** ✓
+- [x] **Issue #7: Apply PCA for Dimensionality Reduction**
   - Implemented `FeatureReducer` class in `src/features/dimensionality_reduction.py`
   - PCA applied with 95% variance threshold
   - PCA model saved to `models/pca.joblib`
   - Validation notebook: `notebooks/pca_validation.ipynb`
-- [x] **Issue #8: Create Train/Val/Test Splits** ✓
+- [x] **Issue #8: Create Train/Val/Test Splits**
   - Stratified split: 70% train, 15% validation, 15% test
   - Total samples: 98,468 (after preprocessing)
   - Train: 68,927 samples | Val: 14,770 samples | Test: 14,771 samples
