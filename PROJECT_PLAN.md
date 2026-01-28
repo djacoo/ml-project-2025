@@ -101,14 +101,53 @@ All work is tracked through GitHub Issues organized by milestones:
 
 ### Data Preprocessing & Feature Engineering
 
-- [x] Handle missing values
-- [x] Remove outliers and invalid data
-- [x] Normalize nutritional values per 100g
-- [ ] Encode categorical variables
-- [ ] Create derived features
-- [ ] Apply dimensionality reduction (PCA)
-- [ ] Prepare train/validation/test splits
-- [ ] Document preprocessing pipeline
+- [x] Handle missing values (Issue #2 - COMPLETED)
+  - Implemented MissingValueHandler class
+  - Dropped features with >95% missing (2 features)
+  - Median imputation for nutritional features
+  - Zero imputation for additives_n
+  - 'unknown' placeholder for categorical features
+  - Validation notebook with before/after analysis
+  - 100% data retention (100,000 rows preserved)
+- [x] Remove outliers and invalid data (Issue #3 - COMPLETED)
+  - Implemented OutlierHandler class with domain rules
+  - Removed 3,903 rows (3.9%) with invalid values
+  - Domain-specific validation (energy, macros, salt ranges)
+  - IQR statistical outlier detection (3×IQR threshold)
+  - Validation notebook with distribution analysis
+  - Final dataset: 96,097 rows × 20 columns (all values valid)
+- [x] Normalize nutritional values per 100g (Issue #4 - COMPLETED)
+  - Implemented FeatureScaler class
+  - StandardScaler/MinMaxScaler based on skewness
+  - Applied to all numerical features
+  - Fitted on train split, applied to entire dataset
+  - Scaler saved to models/scaler.joblib
+  - Validation notebook: notebooks/scaling_validation.ipynb
+- [x] Encode categorical variables (Issue #5 - COMPLETED)
+  - Implemented FeatureEncoder class
+  - One-hot encoding for top 15 countries
+  - Target encoding for pnns_groups_2
+  - Encoder saved to models/encoder.joblib
+  - Validation notebook: notebooks/encoding_validation.ipynb
+- [x] Create derived features (Issue #6 - COMPLETED)
+  - Implemented FeatureEngineer class
+  - Created macro nutrient ratios
+  - Added energy density and caloric contribution features
+  - Created boolean flags for high nutrient levels
+  - Validation notebook: notebooks/feature_engineering_validation.ipynb
+- [x] Apply dimensionality reduction (PCA) (Issue #7 - COMPLETED)
+  - Implemented FeatureReducer class
+  - PCA with 95% variance threshold
+  - PCA model saved to models/pca.joblib
+  - Validation notebook: notebooks/pca_validation.ipynb
+- [x] Prepare train/validation/test splits (Issue #8 - COMPLETED)
+  - Stratified split: 70% train, 15% val, 15% test
+  - Total: 98,468 samples after preprocessing
+  - Class distribution preserved across splits
+  - Splits saved to data/processed/splits/
+- [x] Document preprocessing pipeline
+  - Complete pipeline documented in README.md
+  - All preprocessing models saved for inference
 
 **Deliverable:** Clean dataset ready for modeling
 

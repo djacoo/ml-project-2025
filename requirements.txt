@@ -16,6 +16,7 @@ plotly>=5.14.0
 # Data Processing
 openpyxl>=3.1.0
 requests>=2.31.0
+pycountry>=22.3.5
 
 # Jupyter
 jupyter>=1.0.0
